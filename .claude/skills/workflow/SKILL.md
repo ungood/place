@@ -1,83 +1,69 @@
 ---
 name: workflow
-description: The PM/PE spec-driven loop for projects that combine Linear and cucumber-rs. Per Linear issue, runs Grooming → (Spec ∥ Plan) → Human review → Implement, with cross-role agent reviews at each phase. Invoke whenever starting work on a Linear issue. Pairs with the `linear` and `cucumber` skills.
+description: The PM/PE/SWE spec-driven loop for projects that combine Linear and cucumber-rs. Per Linear issue, runs Grooming → Spec → Plan → Implement, with a consolidated human review gate before Implement. Invoke whenever starting work on a Linear issue. Pairs with the `linear` and `cucumber` skills.
 ---
 
 # workflow
 
-Spec-driven loop modeled on PM/PE collaboration at a real product team. For each Linear issue, four phases run in order: **Grooming → (Spec ∥ Plan) → Human review → Implement**. This skill is project-agnostic; pair it with the `linear` and `cucumber` skills, and consult the project's `CLAUDE.md` for binding details.
+Spec-driven loop modeled on PM/PE/SWE collaboration at a real product team. For each Linear issue, four phases run in order: **Grooming → Spec → Plan → Implement**. Pair with the `linear` and `cucumber` skills, and consult the project's `CLAUDE.md` for binding details.
 
 ## Roles
 
-- **PM agent** (Product Manager) — authors the **spec** (Gherkin `.feature` files) and reviews the **plan**. Cares about: user-facing behavior, edge cases, acceptance criteria, naming, scope.
-- **PE agent** (Product Engineer) — authors the **plan** (technical approach) and reviews the **spec**. Cares about: feasibility, files-to-touch, risks, dependencies, test coverage of acceptance.
-- **Reviewer agent (Implement)** — used in Phase 3. A code-review-style agent (project-defined `code-reviewer` subagent_type, or `general-purpose` with explicit reviewer instructions).
-- **Human** — final gate before Implement and final gate at PR merge.
+- **PM agent** (Product Manager) — drives **Grooming**; authors the **Spec** (Gherkin `.feature` files); reviews the **Plan**. Cares about: user-facing behavior, edge cases, scope.
+- **PE agent** (Product Engineer) — provides feasibility check during Grooming; reviews the **Spec**; authors the **Plan**; reviews the **Implementation**. Cares about: feasibility, files-to-touch, risks, dependencies, code standards.
+- **SWE agent** (Software Engineer) — authors the **Implementation**. Cares about: minimum code and documentation that turn the spec green; code quality.
+- **Human** — final gate before Implement, and final gate at PR merge.
 
 Each agent runs in its own Claude session via the `Agent` tool, so reviews are independent of the worker's context.
 
 ## Phase 1 — Grooming
 
 - **Driver**: PM agent.
-- **Artifact**: a refined Linear issue (Story, Acceptance, scope, type label, milestone) per the `linear` skill template.
-- **PM produces**: a concrete user story; testable Acceptance bullets; an explicit scope decision (single feature vs. multi-feature epic); type label; milestone.
-- **PE reviews**: feasibility-flag pass — calls out anything expensive, unclear, or dependent on missing capability. Surfaces surprises before the human is pulled in. Not approval — readiness-for-human-review.
-- **Exit gate**: human accepts the groomed issue and moves it to **In Progress**.
+- **Artifact**: a refined Linear issue per the team's Linear issue template.
+- **PE reviews**: feasibility-flag pass — surfaces anything expensive, unclear, or dependent on missing capability before the human is pulled in. Not approval — readiness-for-human-review.
+- **Exit gate**: human accepts the groomed issue and moves it to **Planned**.
 
-## Phase 2 — Spec ∥ Plan (parallel)
+## Phase 2 — Spec
 
-After Grooming, two branches run **concurrently**, each authored by one role and reviewed by the other.
-
-### Spec branch (PM authors, PE reviews)
-
-- **Artifact**: one or more `.feature` files on a branch named `<issue-key>-<slug>`; the issue's **Spec** field updated to the path(s); `cargo test --test cucumber` is **red** (or scenarios unimplemented).
-- **PM produces**: Gherkin scenarios with concrete example values covering every Acceptance bullet. Layout per the `cucumber` skill.
+- **Driver**: PM agent.
+- **Artifact**: one or more `.feature` files on a branch named `<issue-key>-<slug>`. The cucumber suite is **red** (or scenarios unimplemented). The cucumber spec *is* the acceptance criteria.
 - **PE checks**:
-  - Every Acceptance bullet has at least one scenario.
-  - Scenarios are testable from where the code can observe them.
+  - Scenarios match the Story.
+  - Scenarios are observable from where the code can sit.
   - Tests actually fail (no false-green).
   - No infeasible assumptions about the runtime/environment.
+- **Exit gate**: PE review is clean; spec is ready for the consolidated human review at the end of Phase 3.
 
-### Plan branch (PE authors, PM reviews)
+## Phase 3 — Plan
 
-- **Artifact**: a short technical plan in the issue (or `.claude/plans/<issue-key>.md` for larger work) — files to touch, approach, risks, dependency map.
-- **PE produces**: file-level plan; risks; alternatives considered; mapping from Acceptance bullets → planned scenarios → planned code changes.
+- **Driver**: PE agent.
+- **Artifact**: a short technical plan in `plans/<issue-key>.md` — files to touch, approach, risks, dependency map, mapping from scenarios → planned changes. Plans are durable records of decisions and live in the repo, not in `.claude/`.
 - **PM checks**:
-  - The plan covers every Acceptance bullet.
+  - The plan covers every scenario in the spec.
   - User-visible behavior matches the spec.
   - Nothing is silently descoped.
   - Risks the user should know about are surfaced.
+- **Exit gate**: PM review is clean; the **human reviews spec and plan together** and accepts the pair before Phase 4 begins.
 
-### Coordination
+## Phase 4 — Implement
 
-The two branches share the same Linear issue and feature branch. If one branch surfaces a finding that invalidates the other, comment on the issue and the affected branch reworks. **Both** cross-reviews must be clean before Phase 2 ends.
-
-### Exit gate
-
-The human reviews **spec and plan together**. They accept the pair, send one or both back for rework, or abort.
-
-## Phase 3 — Implement
-
-- **Driver**: PE agent.
-- **Artifact**: code that turns the new scenarios green; PR opened; issue moved to **In Review**.
-- **PE produces**: minimum code to satisfy the spec; incremental commits; green test run; PR referencing the issue key in title and body.
-- **Reviewer agent checks**: correctness vs. the spec; code quality; no regressions in other features; no issue-tracker references in source.
+- **Driver**: SWE agent. Issue moves to **In Progress** when implementation starts.
+- **Artifact**: code *and documentation* that turn the new scenarios green; PR opened against the project's PR template (which carries the project's definition-of-done checklist); issue moves to **In Review** on PR open.
+- **PE checks**:
+  - Correctness vs. the spec.
+  - Code quality and adherence to project standards.
+  - Documentation is updated alongside behavior changes.
+  - The PR-template definition-of-done checklist is genuinely satisfied — not box-checked.
+  - No issue-tracker references in source.
 - **Exit gate**: human merges the PR; issue moves to **Done**. Any `@wip`-tagged scenarios become a follow-up issue.
 
 ## Meta-rules
 
-- **Don't write code without a `.feature` to justify it.** Phase 3 is gated on Phase 2.
-- **Bug fixes** start with a regression scenario in the Spec branch (red), then Implement.
-- **Epics / cross-feature refactors**: the issue tracks a checklist of feature paths; the Spec branch lists them all; the Plan branch sequences them; Implement runs per file; the issue stays open until all paths are green.
-- **Phase collapse is explicit, not implicit**: trivial chores (typo fix, dep bump) may collapse the PM/PE split, but the agent must say so out loud and the human must accept.
+- **Don't write code without a `.feature` to justify it.** Phase 4 is gated on Phases 2 and 3.
+- **Bug fixes** start with a regression scenario in Phase 2 (red), then proceed normally.
+- **Epics / cross-feature refactors**: the issue tracks a checklist of feature paths; Phase 2 lists them all; Phase 3 sequences them; Phase 4 runs per file; the issue stays open until all paths are green.
+- **Phase collapse is explicit, not implicit**: trivial chores (typo fix, dep bump) may collapse phases, but the agent must say so out loud and the human must accept.
 
 ## How to spawn the agents
 
-Use the `Agent` tool to start a fresh Claude session for each role. Pass the agent the relevant skill content (or refer it to the skill file by path), the issue body, and the artifact location. Suggested mappings — projects can override:
-
-- **PM (worker or reviewer)**: `Agent({subagent_type: "general-purpose", description: "PM: <task> for <issue-key>", prompt: "..."})`
-- **PE (worker)**: `Agent({subagent_type: "Plan", description: "PE: plan for <issue-key>", prompt: "..."})` — the `Plan` subagent's design focus fits planning. For spec review use `general-purpose`.
-- **PE (reviewer of spec)**: `Agent({subagent_type: "general-purpose", description: "PE: review spec for <issue-key>", prompt: "..."})`
-- **Implement reviewer**: prefer a project-defined `code-reviewer` subagent_type if available; otherwise `general-purpose` with explicit reviewer instructions.
-
-In every prompt, brief the agent like a smart colleague who just walked into the room: state the goal, the artifact location, the criteria, and the expected response shape.
+Use the `Agent` tool to start a fresh Claude session for each role. Pass the agent the relevant skill content (or refer it to the skill file by path), the issue body, and the artifact location. Brief each agent like a smart colleague who just walked into the room: state the goal, the artifact location, the criteria, and the expected response shape.
