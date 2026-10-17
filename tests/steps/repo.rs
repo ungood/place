@@ -79,11 +79,19 @@ async fn set_origin(world: &mut PlaceWorld, path: String, url: String) {
         .await;
 }
 
+/// The origin URL as configured. `git remote get-url` would apply the test
+/// config's `insteadOf` rewriting and return the local bare repo's path.
+async fn origin_url(world: &PlaceWorld, dir: &std::path::Path) -> String {
+    world
+        .git(dir, &["config", "--get", "remote.origin.url"])
+        .await
+}
+
 #[then(expr = "{string} is a clone of {string}")]
 async fn is_clone_of(world: &mut PlaceWorld, path: String, url: String) {
     let dir = world.path(&path);
     assert!(dir.join(".git").exists(), "{path} isn't a git checkout");
-    let origin = world.git(&dir, &["remote", "get-url", "origin"]).await;
+    let origin = origin_url(world, &dir).await;
     assert_eq!(origin, url, "{path} has the wrong origin");
 }
 
@@ -112,7 +120,7 @@ async fn detached_at_tag(world: &mut PlaceWorld, path: String, tag: String) {
 
 async fn remote_head(world: &PlaceWorld, path: &str, branch: &str) -> String {
     let dir = world.path(path);
-    let origin = world.git(&dir, &["remote", "get-url", "origin"]).await;
+    let origin = origin_url(world, &dir).await;
     let bare = world.remote_path(&origin);
     world
         .git(&bare, &["rev-parse", &format!("refs/heads/{branch}")])
