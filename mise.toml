@@ -7,7 +7,7 @@ run = "cargo build"
 
 [tasks.test]
 description = "Run unit tests and the cucumber features"
-depends = ["test:unit", "test:features"]
+run = [{ task = "test:unit" }, { task = "test:features" }]
 
 [tasks."test:unit"]
 description = "Run unit tests"

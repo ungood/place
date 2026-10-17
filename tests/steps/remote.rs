@@ -1,5 +1,3 @@
-use std::fs;
-
 use cucumber::gherkin::Step;
 use cucumber::given;
 
@@ -7,29 +5,7 @@ use super::world::{PlaceWorld, docstring};
 
 #[given(expr = "a remote repository {string}")]
 async fn remote_repository(world: &mut PlaceWorld, url: String) {
-    let bare = world.remote_path(&url);
-    let scratch = world.scratch_path(&url);
-    fs::create_dir_all(&bare).expect("create remote dir");
-    fs::create_dir_all(&scratch).expect("create scratch dir");
-    world
-        .git(&bare, &["init", "-q", "--bare", "-b", "main"])
-        .await;
-    world.git(&scratch, &["init", "-q", "-b", "main"]).await;
-    world
-        .commit_file(
-            &scratch,
-            "README.md",
-            &format!("# {url}\n"),
-            "Initial commit",
-        )
-        .await;
-    world
-        .git(
-            &scratch,
-            &["remote", "add", "origin", &bare.display().to_string()],
-        )
-        .await;
-    world.git(&scratch, &["push", "-q", "origin", "main"]).await;
+    world.install_remote(&url).await;
 }
 
 #[given(expr = "the remote {string} has a branch {string}")]
