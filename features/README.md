@@ -13,7 +13,7 @@ These files specify place's behavior. Each one describes a command or capability
 
 Scenarios use real-looking URLs such as `https://github.com/ungood/place.git`, never placeholders. The test harness gives git a config that rewrites `https://github.com/` and `git@github.com:` to a directory of local bare repositories, so tests never touch the network. A URL with no matching remote fails to clone, the way a missing repository would.
 
-Every remote starts with one commit on `main`, which is its default branch. Test commits use a fixed author, committer and date, so commit hashes are the same on every run and scenarios can write them out.
+Each remote is built once per run and copied into the scenarios that use it. Every remote starts with one commit on `main`, which is its default branch. Test commits use a fixed author, committer and date, so commit hashes are the same on every run and scenarios can write them out.
 
 ## Steps
 

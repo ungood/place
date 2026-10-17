@@ -17,7 +17,7 @@ cucumber = "0.23"
 serde_json = "1"
 strip-ansi-escapes = "0.2"
 tempfile = "3"
-tokio = { version = "1", features = ["macros", "process", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "process", "rt-multi-thread", "sync"] }
 toml = "1"
 
 [[test]]

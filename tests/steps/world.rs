@@ -5,11 +5,12 @@ use std::process::Output;
 
 use cucumber::World;
 use tempfile::TempDir;
-use tokio::process::Command;
+
+use super::templates;
 
 /// Every commit made by the harness uses this identity and date, so commit
 /// hashes are the same on every run.
-const GIT_IDENTITY: [(&str, &str); 6] = [
+pub const GIT_IDENTITY: [(&str, &str); 6] = [
     ("GIT_AUTHOR_NAME", "Place Test"),
     ("GIT_AUTHOR_EMAIL", "test@place.invalid"),
     ("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z"),
@@ -104,16 +105,21 @@ impl PlaceWorld {
 
     /// Where the bare repository for a GitHub URL lives.
     pub fn remote_path(&self, url: &str) -> PathBuf {
-        let rest = url
-            .strip_prefix("https://github.com/")
-            .unwrap_or_else(|| panic!("test remotes must be https://github.com/ URLs, got {url}"));
-        self.base().join("remotes/github.com").join(rest)
+        self.base()
+            .join("remotes/github.com")
+            .join(templates::github_path(url))
     }
 
     /// A working clone of a remote, used to make commits and push them.
     pub fn scratch_path(&self, url: &str) -> PathBuf {
-        let rest = url.strip_prefix("https://github.com/").expect("github URL");
-        self.base().join("scratch").join(rest)
+        self.base()
+            .join("scratch")
+            .join(templates::github_path(url))
+    }
+
+    /// Install the test remote for `url` in this scenario.
+    pub async fn install_remote(&self, url: &str) {
+        templates::install(url, &self.base()).await;
     }
 
     pub fn path(&self, relative: &str) -> PathBuf {
@@ -121,14 +127,7 @@ impl PlaceWorld {
     }
 
     pub async fn git(&self, dir: &Path, args: &[&str]) -> String {
-        let output = Command::new("git")
-            .args(args)
-            .current_dir(dir)
-            .env_clear()
-            .envs(self.process_env())
-            .output()
-            .await
-            .expect("run git");
+        let output = run("git", args, dir, self.process_env()).await;
         assert!(
             output.status.success(),
             "git {} failed in {}:\n{}",
@@ -140,14 +139,8 @@ impl PlaceWorld {
     }
 
     pub async fn git_ok(&self, dir: &Path, args: &[&str]) -> bool {
-        Command::new("git")
-            .args(args)
-            .current_dir(dir)
-            .env_clear()
-            .envs(self.process_env())
-            .output()
+        run("git", args, dir, self.process_env())
             .await
-            .expect("run git")
             .status
             .success()
     }
@@ -186,16 +179,35 @@ impl PlaceWorld {
 
     /// Run place with the given arguments in a directory.
     pub async fn run_place(&self, args: &[String], dir: &Path) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_place"))
-            .args(args)
-            .current_dir(dir)
-            .env_clear()
-            .envs(self.process_env())
-            .envs(self.env.iter().cloned())
-            .output()
-            .await
-            .expect("run place")
+        let mut env = self.process_env();
+        env.extend(self.env.iter().cloned());
+        run(env!("CARGO_BIN_EXE_place"), args, dir, env).await
     }
+}
+
+/// Run a program to completion. Starting a process blocks, and every scenario
+/// shares one task, so the start happens on the blocking thread pool where
+/// scenarios can start processes in parallel.
+pub async fn run<S: AsRef<str>>(
+    program: &str,
+    args: &[S],
+    dir: &Path,
+    env: Vec<(String, String)>,
+) -> Output {
+    let program = program.to_string();
+    let args: Vec<String> = args.iter().map(|a| a.as_ref().to_string()).collect();
+    let dir = dir.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        std::process::Command::new(&program)
+            .args(&args)
+            .current_dir(&dir)
+            .env_clear()
+            .envs(env)
+            .output()
+            .unwrap_or_else(|e| panic!("can't run {program}: {e}"))
+    })
+    .await
+    .expect("process thread panicked")
 }
 
 /// Remove colors and the decoration miette draws around messages, and
