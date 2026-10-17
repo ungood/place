@@ -17,7 +17,8 @@ Skills live in `.agents/skills/`. `.claude/skills` is a symlink to that director
 - `docs/design.md`: the design, and the source of truth for behavior.
 - `features/`: Gherkin `.feature` files, one per command or capability, kebab-case. `features/README.md` holds the step vocabulary.
 - `tests/cucumber.rs`: the single cucumber-rs runner.
-- `tests/steps/`: step definitions, grouped by area.
+- `tests/steps/`: step definitions, grouped by subject (remotes, workplace files, repos, running place, outcomes). `world.rs` holds the test world and its isolated git environment.
+- `src/main.rs`: the CLI. It currently parses every M0 command and reports that it isn't implemented.
 
 ## Conventions
 
@@ -27,4 +28,5 @@ Skills live in `.agents/skills/`. `.claude/skills` is a symlink to that director
 - `features/README.md` defines the step vocabulary and placeholders. Reuse those steps, and add new ones there.
 - Issue numbers and tracker URLs appear in commit messages and PR descriptions only, never in source, comments or `.feature` files.
 - `@wip` is the only Gherkin tag. CI excludes `@wip` scenarios.
-- The Cargo project and the cucumber runner aren't scaffolded yet. They arrive with the first implementation PR.
+- mise provides the Rust toolchain and the tasks: `mise run build`, `mise run test` (or `test:unit` and `test:features`), `mise run lint`, `mise run fmt`. Run `mise run lint` and `mise run test` before committing.
+- Machine-specific settings, such as a pinned `SDKROOT` on macOS, go in `mise.local.toml`, which git ignores.
