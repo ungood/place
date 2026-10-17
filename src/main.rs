@@ -21,9 +21,8 @@ struct Cli {
     #[arg(short = 'C', global = true, value_name = "dir")]
     directory: Option<PathBuf>,
 
+    // Not global, because `place add` has its own -e/--env.
     /// Load the place.<env>.toml files for these environments.
-    ///
-    /// Not global, because `place add` has its own -e/--env.
     #[arg(
         short = 'E',
         long = "env",
