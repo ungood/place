@@ -15,7 +15,7 @@ fn describe(world: &PlaceWorld) -> String {
 }
 
 #[then("the command succeeds")]
-fn succeeds(world: &mut PlaceWorld) {
+async fn succeeds(world: &mut PlaceWorld) {
     assert!(
         world.last().status.success(),
         "the command failed\n{}",
@@ -24,7 +24,7 @@ fn succeeds(world: &mut PlaceWorld) {
 }
 
 #[then("the command fails")]
-fn fails(world: &mut PlaceWorld) {
+async fn fails(world: &mut PlaceWorld) {
     assert!(
         !world.last().status.success(),
         "the command succeeded\n{}",
@@ -33,7 +33,7 @@ fn fails(world: &mut PlaceWorld) {
 }
 
 #[then(expr = "the command fails with exit code {int}")]
-fn fails_with_code(world: &mut PlaceWorld, code: i32) {
+async fn fails_with_code(world: &mut PlaceWorld, code: i32) {
     assert_eq!(
         world.last().status.code(),
         Some(code),
@@ -54,13 +54,13 @@ fn assert_contains(world: &PlaceWorld, haystack: &str, step: &Step, what: &str) 
 }
 
 #[then("the error says:")]
-fn error_says(world: &mut PlaceWorld, step: &Step) {
+async fn error_says(world: &mut PlaceWorld, step: &Step) {
     let stderr = world.stderr();
     assert_contains(world, &stderr, step, "error");
 }
 
 #[then("the help says:")]
-fn help_says(world: &mut PlaceWorld, step: &Step) {
+async fn help_says(world: &mut PlaceWorld, step: &Step) {
     let stderr = world.stderr();
     let help = stderr
         .split_once("help:")
@@ -70,21 +70,23 @@ fn help_says(world: &mut PlaceWorld, step: &Step) {
 }
 
 #[then("place warns:")]
-fn place_warns(world: &mut PlaceWorld, step: &Step) {
+async fn place_warns(world: &mut PlaceWorld, step: &Step) {
     let output = format!("{} {}", world.stdout(), world.stderr());
     assert_contains(world, &output, step, "warning");
 }
 
 #[then("the output says:")]
-fn output_says(world: &mut PlaceWorld, step: &Step) {
+async fn output_says(world: &mut PlaceWorld, step: &Step) {
     let stdout = world.stdout();
     assert_contains(world, &stdout, step, "output");
 }
 
 /// The states `place status --json` reports for a repo. The JSON has the
 /// shape `{"repos": [{"path": "place", "states": ["on ref", "dirty"]}]}`.
-fn states(world: &PlaceWorld, path: &str) -> Vec<String> {
-    let output = world.run_place(&["status".into(), "--json".into()], &world.workplace);
+async fn states(world: &PlaceWorld, path: &str) -> Vec<String> {
+    let output = world
+        .run_place(&["status".into(), "--json".into()], &world.workplace)
+        .await;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let json: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| {
         panic!(
@@ -105,8 +107,8 @@ fn states(world: &PlaceWorld, path: &str) -> Vec<String> {
 }
 
 #[then(expr = "place reports {string} as {string}")]
-fn reports(world: &mut PlaceWorld, path: String, state: String) {
-    let states = states(world, &path);
+async fn reports(world: &mut PlaceWorld, path: String, state: String) {
+    let states = states(world, &path).await;
     assert!(
         states.contains(&state),
         "{path} isn't reported as {state}: {states:?}"
@@ -114,8 +116,8 @@ fn reports(world: &mut PlaceWorld, path: String, state: String) {
 }
 
 #[then(expr = "place doesn't report {string} as {string}")]
-fn does_not_report(world: &mut PlaceWorld, path: String, state: String) {
-    let states = states(world, &path);
+async fn does_not_report(world: &mut PlaceWorld, path: String, state: String) {
+    let states = states(world, &path).await;
     assert!(
         !states.contains(&state),
         "{path} is reported as {state}: {states:?}"

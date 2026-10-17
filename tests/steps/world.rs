@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Output;
 
 use cucumber::World;
 use tempfile::TempDir;
+use tokio::process::Command;
 
 /// Every commit made by the harness uses this identity and date, so commit
 /// hashes are the same on every run.
@@ -119,13 +120,14 @@ impl PlaceWorld {
         self.workplace.join(relative)
     }
 
-    pub fn git(&self, dir: &Path, args: &[&str]) -> String {
+    pub async fn git(&self, dir: &Path, args: &[&str]) -> String {
         let output = Command::new("git")
             .args(args)
             .current_dir(dir)
             .env_clear()
             .envs(self.process_env())
             .output()
+            .await
             .expect("run git");
         assert!(
             output.status.success(),
@@ -137,28 +139,35 @@ impl PlaceWorld {
         String::from_utf8_lossy(&output.stdout).trim().to_string()
     }
 
-    pub fn git_ok(&self, dir: &Path, args: &[&str]) -> bool {
+    pub async fn git_ok(&self, dir: &Path, args: &[&str]) -> bool {
         Command::new("git")
             .args(args)
             .current_dir(dir)
             .env_clear()
             .envs(self.process_env())
             .output()
+            .await
             .expect("run git")
             .status
             .success()
     }
 
     /// Commit a file in a directory, writing `content` to it first.
-    pub fn commit_file(&self, dir: &Path, file: &str, content: &str, message: &str) -> String {
+    pub async fn commit_file(
+        &self,
+        dir: &Path,
+        file: &str,
+        content: &str,
+        message: &str,
+    ) -> String {
         let path = dir.join(file);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create parent dir");
         }
         fs::write(&path, content).expect("write file");
-        self.git(dir, &["add", file]);
-        self.git(dir, &["commit", "-q", "-m", message]);
-        self.git(dir, &["rev-parse", "HEAD"])
+        self.git(dir, &["add", file]).await;
+        self.git(dir, &["commit", "-q", "-m", message]).await;
+        self.git(dir, &["rev-parse", "HEAD"]).await
     }
 
     pub fn last(&self) -> &Output {
@@ -176,7 +185,7 @@ impl PlaceWorld {
     }
 
     /// Run place with the given arguments in a directory.
-    pub fn run_place(&self, args: &[String], dir: &Path) -> Output {
+    pub async fn run_place(&self, args: &[String], dir: &Path) -> Output {
         Command::new(env!("CARGO_BIN_EXE_place"))
             .args(args)
             .current_dir(dir)
@@ -184,6 +193,7 @@ impl PlaceWorld {
             .envs(self.process_env())
             .envs(self.env.iter().cloned())
             .output()
+            .await
             .expect("run place")
     }
 }
