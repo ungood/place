@@ -31,7 +31,7 @@ A workplace may itself be a git repository, as `ungood/factory` is. That reposit
 
 ```toml
 [repos.place]
-url = "https://github.com/ungood/place.git"
+url = "https://github.com/onetruename/place.git"
 
 [repos.agents]
 url = "https://github.com/ungood/agents.git"
@@ -141,7 +141,7 @@ Prints the state of every repo, including nested workplaces. By default it doesn
 `--json` prints one object with a `repos` array. Each repo has its `path` relative to the workplace, its `url` and `ref` (`null` for an unlisted repo, or when there's no ref), and its `states`, named exactly as in [Repo state](#repo-state):
 
 ```json
-{"repos": [{"path": "place", "url": "https://github.com/ungood/place.git", "ref": null, "states": ["on ref", "dirty"]}]}
+{"repos": [{"path": "place", "url": "https://github.com/onetruename/place.git", "ref": null, "states": ["on ref", "dirty"]}]}
 ```
 
 The exit code is 0 unless place itself fails. With `--exit-code`, it is 1 when any repo isn't clean and on its ref, like `git diff --exit-code`.
@@ -190,7 +190,7 @@ Treating every `*.repos` file as a nested workplace may be too broad. Some repos
 - **Git:** shell out to the git CLI. That gives place the user's credential helpers, SSH agent, `insteadOf` rules and hooks for free, which is also why vcstool does it. A library such as gix can speed up read-only `status` later if it proves slow.
 - **Concurrency:** a worker pool of `--jobs` threads (default: the number of CPUs), each running git subprocesses.
 - **Tests:** unit tests in Rust. Integration tests in cucumber-rs, which run the real binary against temporary directories with local bare repositories as remotes, so they need no network.
-- **Distribution:** GitHub releases, a nix flake, and installation through mise (`mise use github:ungood/place`).
+- **Distribution:** GitHub releases, a nix flake, and installation through mise (`mise use github:onetruename/place`).
 
 ## Later
 

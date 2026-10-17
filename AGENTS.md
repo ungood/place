@@ -25,7 +25,7 @@ Skills live in `.agents/skills/`. `.claude/skills` is a symlink to that director
 
 ## Conventions
 
-- Work is tracked in GitHub Issues on `ungood/place`.
+- Work is tracked in GitHub Issues on `onetruename/place`.
 - Behavior is specified in `features/` before it's implemented. Integration tests are cucumber-rs. Unit tests are ordinary Rust tests next to the code.
 - Integration tests use local bare repos as remotes and never touch the network.
 - `features/README.md` defines the step vocabulary and placeholders. Reuse those steps, and add new ones there.
