@@ -1,0 +1,26 @@
+[tools]
+rust = { version = "1.99.0", components = "clippy,rustfmt" }
+
+[tasks.build]
+description = "Build the place binary"
+run = "cargo build"
+
+[tasks.test]
+description = "Run unit tests and the cucumber features"
+depends = ["test:unit", "test:features"]
+
+[tasks."test:unit"]
+description = "Run unit tests"
+run = "cargo test --bins"
+
+[tasks."test:features"]
+description = "Run the cucumber features in features/"
+run = "cargo test --test cucumber"
+
+[tasks.lint]
+description = "Check formatting and run clippy"
+run = ["cargo fmt --check", "cargo clippy --all-targets -- -D warnings"]
+
+[tasks.fmt]
+description = "Format the code"
+run = "cargo fmt"

@@ -32,11 +32,11 @@ Feature: place sync
     And "place" is <checkout>
 
     Examples:
-      | ref                | checkout                     |
-      | develop            | checked out on "develop"     |
-      | refs/heads/develop | checked out on "develop"     |
-      | v1.0               | detached at the tag "v1.0"   |
-      | COMMIT_OF_V1_0     | detached at the tag "v1.0"   |
+      | ref                                      | checkout                   |
+      | develop                                  | checked out on "develop"   |
+      | refs/heads/develop                       | checked out on "develop"   |
+      | v1.0                                     | detached at the tag "v1.0" |
+      | fa853e769fdc374139e7677cd78006997bb679bc | detached at the tag "v1.0" |
 
   Scenario: A clean repo on its ref is fast-forwarded
     Given "place" is a clone of "https://github.com/ungood/place.git"
