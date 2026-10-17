@@ -117,10 +117,13 @@ fn match_remote(dir: &Path, wanted: &str) -> Result<Result<String, Option<String
 }
 
 /// Inspect the repo for `entry` at `dir`, fetching first if `fetch` is set.
-/// A failed fetch is returned as git's message alongside the inspection.
+/// `nested` lists the checkouts of a nested workplace in the repo, which
+/// don't make it dirty. A failed fetch is returned as git's message
+/// alongside the inspection.
 pub fn inspect(
     dir: &Path,
     entry: &Entry,
+    nested: &[String],
     fetch: bool,
 ) -> Result<(Inspection, Option<String>), Error> {
     if !dir.exists() {
@@ -142,7 +145,7 @@ pub fn inspect(
     } else {
         None
     };
-    let copy = WorkingCopy::read(dir)?;
+    let copy = WorkingCopy::read(dir, nested)?;
     let refs = Refs::read(dir)?;
     let inspection = compute(dir, entry, remote, &copy, &refs)?;
     Ok((inspection, fetch_error))

@@ -47,6 +47,16 @@ impl Workplace {
         Self::load(dir, self.display(path) + "/", envs).map(Some)
     }
 
+    /// The paths a nested workplace in the repo at `path` lists, whatever
+    /// the environment, so their checkouts don't count as changes to it.
+    pub fn nested_paths(&self, path: &str) -> Vec<String> {
+        let dir = self.dir.join(path);
+        if !config::is_workplace(&dir) {
+            return Vec::new();
+        }
+        config::listed_paths(&dir)
+    }
+
     /// A repo's path as the user sees it, relative to the top workplace.
     pub fn display(&self, path: &str) -> String {
         format!("{}{path}", self.prefix)
@@ -121,8 +131,52 @@ pub fn check_selection(workplace: &Workplace, filters: &[String]) -> Result<(), 
     Ok(())
 }
 
+/// The path of `target` relative to `workplace`, or `None` when it lies
+/// outside it. `..` is resolved without touching the file system.
+pub fn relative_path(workplace: &Path, target: &str) -> Option<String> {
+    use std::path::Component;
+    let mut parts: Vec<String> = Vec::new();
+    let joined = workplace.join(target);
+    for component in joined.components() {
+        match component {
+            Component::ParentDir => {
+                parts.pop()?;
+            }
+            Component::Normal(part) => parts.push(part.to_string_lossy().into_owned()),
+            Component::CurDir => {}
+            Component::RootDir | Component::Prefix(_) => parts.clear(),
+        }
+    }
+    let base: Vec<String> = workplace
+        .components()
+        .filter_map(|c| match c {
+            Component::Normal(part) => Some(part.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect();
+    let rest = parts.strip_prefix(base.as_slice())?;
+    (!rest.is_empty()).then(|| rest.join("/"))
+}
+
 /// Clean up a path given on the command line: no `./` and no trailing slash.
 pub fn clean_path(path: &str) -> String {
     let path = path.trim_end_matches('/');
     path.strip_prefix("./").unwrap_or(path).to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relative_paths() {
+        let w = Path::new("/w/place");
+        assert_eq!(relative_path(w, "agents").as_deref(), Some("agents"));
+        assert_eq!(relative_path(w, "./a/b/").as_deref(), Some("a/b"));
+        assert_eq!(relative_path(w, "a/../b").as_deref(), Some("b"));
+        assert_eq!(relative_path(w, "/w/place/c").as_deref(), Some("c"));
+        assert_eq!(relative_path(w, "../place"), None);
+        assert_eq!(relative_path(w, "/elsewhere"), None);
+        assert_eq!(relative_path(w, "."), None);
+    }
 }

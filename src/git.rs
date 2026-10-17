@@ -7,11 +7,25 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::{Command, Output};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use console::style;
 
 use crate::error::Error;
 
+static VERBOSE: AtomicBool = AtomicBool::new(false);
+
+/// Print each git command before running it, for `--verbose`.
+pub fn set_verbose(verbose: bool) {
+    VERBOSE.store(verbose, Ordering::Relaxed);
+}
+
 /// Run git in `dir` and return its output, whatever the exit status.
 fn run(dir: &Path, args: &[&str]) -> Result<Output, Error> {
+    if VERBOSE.load(Ordering::Relaxed) {
+        let line = format!("$ git -C {} {}", dir.display(), args.join(" "));
+        eprintln!("{}", style(line).dim());
+    }
     Command::new("git")
         .args(args)
         .current_dir(dir)
@@ -288,8 +302,19 @@ pub struct WorkingCopy {
 }
 
 impl WorkingCopy {
-    pub fn read(dir: &Path) -> Result<Self, Error> {
-        let text = stdout(dir, &["status", "--porcelain=v2", "--branch"])?;
+    /// Read the working copy at `dir`. Changes under `skip`, such as the
+    /// checkouts of a nested workplace, don't count.
+    pub fn read(dir: &Path, skip: &[String]) -> Result<Self, Error> {
+        let excludes: Vec<String> = skip
+            .iter()
+            .map(|path| format!(":(top,exclude,literal){path}"))
+            .collect();
+        let mut args = vec!["status", "--porcelain=v2", "--branch"];
+        if !excludes.is_empty() {
+            args.extend(["--", "."]);
+            args.extend(excludes.iter().map(String::as_str));
+        }
+        let text = stdout(dir, &args)?;
         let mut copy = WorkingCopy::default();
         for line in text.lines() {
             if let Some(head) = line.strip_prefix("# branch.head ") {

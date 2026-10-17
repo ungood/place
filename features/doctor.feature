@@ -115,3 +115,52 @@ Feature: place doctor
     And "place" is a clone of "https://github.com/ungood/place.git"
     When I run "place doctor"
     Then the command succeeds
+
+  Scenario: Every checkout the workplace repository doesn't ignore is in one error
+    Given a remote repository "https://github.com/ungood/agents.git"
+    And a workplace with the file "place.toml":
+      """
+      [repos.place]
+      url = "https://github.com/ungood/place.git"
+
+      [repos.agents]
+      url = "https://github.com/ungood/agents.git"
+      """
+    And the workplace is a git repository
+    And "place" is a clone of "https://github.com/ungood/place.git"
+    And "agents" is a clone of "https://github.com/ungood/agents.git"
+    When I run "place doctor"
+    Then the command fails
+    And the error says:
+      """
+      The workplace repository doesn't ignore "agents" and "place", so git shows them as untracked.
+      """
+    And the help says:
+      """
+      Add "/agents/" and "/place/" to the workplace's .gitignore.
+      """
+
+  Scenario: A nested workplace's repository must ignore its checkouts too
+    Given a remote repository "https://github.com/ungood/agents.git"
+    And the remote "https://github.com/ungood/place.git" has the file "place.toml":
+      """
+      [repos.agents]
+      url = "https://github.com/ungood/agents.git"
+      """
+    And a workplace with the file "place.toml":
+      """
+      [repos.place]
+      url = "https://github.com/ungood/place.git"
+      """
+    And "place" is a clone of "https://github.com/ungood/place.git"
+    And "place/agents" is a clone of "https://github.com/ungood/agents.git"
+    When I run "place doctor"
+    Then the command fails
+    And the error says:
+      """
+      The repository "place" doesn't ignore "agents", so git shows it as untracked.
+      """
+    And the help says:
+      """
+      Add "/agents/" to the .gitignore of "place".
+      """

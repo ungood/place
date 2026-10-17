@@ -69,7 +69,12 @@ fn collect(
         .filter(|(path, _)| selected(filters, &workplace.display(path)))
         .collect();
     let results = output::parallel(&entries, ctx.jobs, |(path, entry)| {
-        state::inspect(&workplace.dir.join(path), entry, fetch)
+        state::inspect(
+            &workplace.dir.join(path),
+            entry,
+            &workplace.nested_paths(path),
+            fetch,
+        )
     });
     for ((path, entry), result) in entries.into_iter().zip(results) {
         let (inspection, fetch_error) = result?;
@@ -120,9 +125,11 @@ fn state_style(state: State) -> Style {
 fn describe(row: &Row, state: State) -> String {
     let tracking = row.inspection.as_ref().and_then(|i| i.tracking.as_ref());
     match (state, tracking) {
-        (State::Ahead, Some(t)) => format!("ahead {}", t.ahead),
-        (State::Behind, Some(t)) => format!("behind {}", t.behind),
-        (State::Diverged, Some(t)) => format!("diverged +{} -{}", t.ahead, t.behind),
+        (State::Ahead, Some(t)) => format!("ahead by {}", t.ahead),
+        (State::Behind, Some(t)) => format!("behind by {}", t.behind),
+        (State::Diverged, Some(t)) => {
+            format!("diverged ({} ahead, {} behind)", t.ahead, t.behind)
+        }
         (State::Elsewhere, _) => match row.inspection.as_ref().and_then(|i| i.checked_out.as_ref())
         {
             Some(branch) => format!("elsewhere on {branch}"),
