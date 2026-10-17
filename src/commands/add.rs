@@ -1,7 +1,7 @@
 use std::process::ExitCode;
 
 use crate::error::Error;
-use crate::workplace::{Workplace, clean_path};
+use crate::workplace::{Workplace, relative_path};
 use crate::{Context, config, git, output, url};
 
 pub fn run(
@@ -17,6 +17,13 @@ pub fn run(
     } else {
         adopt(ctx, &workplace, &file, targets, branch)
     }
+}
+
+/// A path given on the command line, relative to the workplace.
+fn inside(workplace: &Workplace, target: &str) -> Result<String, Error> {
+    relative_path(&workplace.dir, target).ok_or_else(|| Error::OutsideWorkplace {
+        path: target.into(),
+    })
 }
 
 fn check_unlisted(workplace: &Workplace, path: &str) -> Result<(), Error> {
@@ -43,7 +50,7 @@ fn clone(
         [] => url::default_path(repo_url).ok_or_else(|| Error::NoDefaultPath {
             url: repo_url.clone(),
         })?,
-        [path] => clean_path(path),
+        [path] => inside(workplace, path)?,
         _ => return Err(Error::AddArguments),
     };
     check_unlisted(workplace, &path)?;
@@ -73,7 +80,7 @@ fn adopt(
     }
     let mut adopted = Vec::new();
     for target in targets {
-        let path = clean_path(target);
+        let path = inside(workplace, target)?;
         let dir = workplace.dir.join(&path);
         if !dir.exists() {
             return Err(Error::NoSuchPath {

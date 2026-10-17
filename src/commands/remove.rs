@@ -26,11 +26,11 @@ pub fn run(ctx: &Context, paths: &[String], keep: bool, force: bool) -> Result<E
             });
         }
         if !keep && !force {
-            let found = lost_work(&workplace.dir.join(&path), &ctx.envs)?;
+            let found = lost_work(&workplace.dir.join(&path))?;
             if !found.is_empty() {
                 return Err(Error::WouldLoseWork {
                     path,
-                    found: join(&found),
+                    found: output::join(&found),
                 });
             }
         }
@@ -47,6 +47,7 @@ pub fn run(ctx: &Context, paths: &[String], keep: bool, force: bool) -> Result<E
                 file: path.clone(),
                 source,
             })?;
+            remove_empty_parents(&workplace.dir, &dir);
             output::progress(ctx.quiet, &path, "removed, and its checkout deleted");
         } else {
             output::progress(ctx.quiet, &path, "removed");
@@ -56,16 +57,21 @@ pub fn run(ctx: &Context, paths: &[String], keep: bool, force: bool) -> Result<E
 }
 
 /// What deleting the checkout at `dir` would lose, including in the repos
-/// of a nested workplace inside it.
-fn lost_work(dir: &Path, envs: &[String]) -> Result<Vec<String>, Error> {
+/// of a nested workplace inside it, whatever their environment.
+fn lost_work(dir: &Path) -> Result<Vec<String>, Error> {
     if !dir.exists() {
         return Ok(Vec::new());
     }
     if !git::is_checkout(dir) {
         return Ok(vec!["files that aren't in a git checkout".into()]);
     }
+    let nested = if config::is_workplace(dir) {
+        config::listed_paths(dir)
+    } else {
+        Vec::new()
+    };
     let mut found = Vec::new();
-    let copy = WorkingCopy::read(dir)?;
+    let copy = WorkingCopy::read(dir, &nested)?;
     if copy.changes {
         found.push("uncommitted changes".into());
     }
@@ -77,28 +83,29 @@ fn lost_work(dir: &Path, envs: &[String]) -> Result<Vec<String>, Error> {
         let names: Vec<String> = branches.iter().map(|b| format!("\"{b}\"")).collect();
         found.push(format!(
             "commits on {} that aren't on any remote",
-            join(&names)
+            output::join(&names)
         ));
     }
     if git::Refs::read(dir)?.has_stash() {
         found.push("stashed changes".into());
     }
-    if config::is_workplace(dir) {
-        let nested = config::load(dir, envs)?;
-        for path in nested.repos.keys() {
-            for work in lost_work(&dir.join(path), envs)? {
-                found.push(format!("{work} in \"{path}\""));
-            }
+    for path in &nested {
+        for work in lost_work(&dir.join(path))? {
+            found.push(format!("{work} in \"{path}\""));
         }
     }
     Ok(found)
 }
 
-/// Join phrases as "a", "a and b", or "a, b and c".
-fn join(items: &[String]) -> String {
-    match items {
-        [] => String::new(),
-        [one] => one.clone(),
-        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+/// Delete the directories between `dir` and the workplace that are now
+/// empty, such as `vendor` after removing `vendor/place`.
+fn remove_empty_parents(workplace: &Path, dir: &Path) {
+    let mut parent = dir.parent();
+    while let Some(current) = parent {
+        // remove_dir only deletes an empty directory.
+        if current == workplace || std::fs::remove_dir(current).is_err() {
+            break;
+        }
+        parent = current.parent();
     }
 }

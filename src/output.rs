@@ -14,7 +14,7 @@ pub fn error<D: Diagnostic + Send + Sync + 'static>(diagnostic: D) {
 /// Print a line of progress about a repo, unless `--quiet` was given.
 pub fn progress(quiet: bool, path: &str, message: &str) {
     if !quiet {
-        eprintln!("{} {message}", style(path).bold());
+        eprintln!("{}  {message}", style(path).bold());
     }
 }
 
@@ -43,4 +43,13 @@ pub fn parallel<T: Sync, R: Send>(items: &[T], jobs: usize, f: impl Fn(&T) -> R 
                 .expect("every item has a result")
         })
         .collect()
+}
+
+/// Join phrases as "a", "a and b", or "a, b and c".
+pub fn join(items: &[String]) -> String {
+    match items {
+        [] => String::new(),
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
 }

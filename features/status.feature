@@ -152,3 +152,16 @@ Feature: place status
     Given "place" is a clone of "https://github.com/ungood/place.git"
     When I run "place status --exit-code"
     Then the command succeeds
+
+  Scenario: A nested workplace's checkouts don't make its repo dirty
+    Given a remote repository "https://github.com/ungood/agents.git"
+    And the remote "https://github.com/ungood/place.git" has the file "place.toml":
+      """
+      [repos.agents]
+      url = "https://github.com/ungood/agents.git"
+      """
+    And "place" is a clone of "https://github.com/ungood/place.git"
+    And "place/agents" is a clone of "https://github.com/ungood/agents.git"
+    When I run "place status"
+    Then the command succeeds
+    And place doesn't report "place" as "dirty"

@@ -140,3 +140,16 @@ Feature: place add
       Choose another path with "place add <url> <path>". If "place" is a checkout, "place add place" adopts it.
       """
     And the workplace file "place.toml" has no repos
+
+  Scenario: A path outside the workplace can't be adopted
+    When I run "place add ../place"
+    Then the command fails
+    And the error says:
+      """
+      "../place" is outside the workplace.
+      """
+    And the help says:
+      """
+      place add lists checkouts inside the workplace. To clone a repo from a local path, give it as a URL, such as file:///path/to/repo.git.
+      """
+    And the workplace file "place.toml" has no repos

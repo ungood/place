@@ -90,7 +90,7 @@ place never writes `.repos` files. A later `place export --format repos` can pro
 - **wrong remote**: no remote matches the configured URL.
 - **on ref**: HEAD is on the ref's branch, or at its tag or commit.
 - **elsewhere**: HEAD is on another branch, or detached away from the ref.
-- **dirty**: the working tree has uncommitted changes. Untracked files count.
+- **dirty**: the working tree has uncommitted changes. Untracked files count, except the checkouts of a nested workplace inside the repo.
 - **ahead / behind / diverged**: the ref's branch compared with its remote-tracking branch.
 - **default moved**: the repo has no ref, and the remote's default branch is no longer the one it was cloned with. place reports this and never switches branches because of it. The branch it was cloned with is git's `refs/remotes/<remote>/HEAD`, which fetch leaves alone. When place fetches a repo with no ref, it also records the remote's current default branch as the symbolic ref `refs/place/<remote>/HEAD`, so status can compare the two without touching the network.
 - **unlisted**: a git checkout directly inside the workplace that no configuration lists.
@@ -170,8 +170,10 @@ Checks the workplace and exits non-zero when it finds problems:
 - the same path defined in a `.repos` file and in `place.toml` (a warning, because the merge is intended but may surprise);
 - a `.repos` entry whose type isn't git;
 - git is installed and recent enough;
-- if the workplace is a git repository, every child checkout is ignored by it (`git check-ignore`);
+- if the workplace is a git repository, every child checkout is ignored by it (`git check-ignore`), and likewise for each nested workplace;
 - unlisted repos (a warning).
+
+doctor checks nested workplaces too, and reports all the checkouts a repository doesn't ignore in one error.
 
 ## Recursion
 

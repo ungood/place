@@ -141,6 +141,29 @@ pub fn load(dir: &Path, envs: &[String]) -> Result<Config, Error> {
     Ok(config)
 }
 
+/// Every path any workplace file in `dir` lists, whatever the environment.
+/// Files that don't parse are skipped: this is for leaving checkouts alone,
+/// and loading the workplace reports the error.
+pub fn listed_paths(dir: &Path) -> Vec<String> {
+    let mut paths: Vec<String> = workplace_files(dir)
+        .iter()
+        .filter_map(|file| {
+            let text = fs::read_to_string(dir.join(file)).ok()?;
+            let parsed = if is_repos_file(file) {
+                parse_repos(file, &text)
+            } else {
+                parse_toml(file, &text)
+            };
+            parsed.ok()
+        })
+        .flatten()
+        .map(|(path, _, _)| path)
+        .collect();
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
 type Parsed = Vec<(String, String, Option<String>)>;
 
 fn syntax_error(file: &str, text: &str, offset: usize, detail: String) -> Error {
@@ -231,10 +254,22 @@ fn article(word: &str) -> &'static str {
     }
 }
 
+/// serde's message without its location, which the snippet shows, and
+/// without the names of place's own types.
+fn yaml_detail(message: &str) -> String {
+    let message = match message.rfind(" at line ") {
+        Some(i) => &message[..i],
+        None => message,
+    };
+    message
+        .replace("struct ReposFile", "a map with a repositories key")
+        .replace("struct ReposEntry", "a repo with a type, url and version")
+}
+
 fn parse_repos(file: &str, text: &str) -> Result<Parsed, Error> {
     let parsed: ReposFile = serde_yaml_ng::from_str(text).map_err(|e| {
         let offset = e.location().map_or(0, |l| l.index());
-        syntax_error(file, text, offset, e.to_string())
+        syntax_error(file, text, offset, yaml_detail(&e.to_string()))
     })?;
     let mut entries = Vec::new();
     for (path, entry) in parsed.repositories.unwrap_or_default() {
@@ -313,7 +348,13 @@ pub fn remove_entry(dir: &Path, file: &str, path: &str) -> Result<(), Error> {
     if let Some(repos) = doc.get_mut("repos").and_then(Item::as_table_like_mut) {
         repos.remove(path);
     }
-    write(dir, file, &doc.to_string())
+    let mut edited = doc.to_string();
+    // The next table keeps the blank line that separated it from the one
+    // removed, which would start the file with a blank line.
+    if !text.starts_with('\n') {
+        edited = edited.trim_start_matches('\n').to_string();
+    }
+    write(dir, file, &edited)
 }
 
 fn write(dir: &Path, file: &str, text: &str) -> Result<(), Error> {
@@ -419,6 +460,19 @@ mod tests {
             text,
             format!("{original}\n[repos.place]\nurl = \"https://p\"\n")
         );
+    }
+
+    #[test]
+    fn removing_the_first_entry_leaves_no_blank_line() {
+        let d = dir();
+        write_file(
+            d.path(),
+            "place.toml",
+            "[repos.a]\nurl = \"https://a\"\n\n[repos.b]\nurl = \"https://b\"\n",
+        );
+        remove_entry(d.path(), "place.toml", "a").unwrap();
+        let text = fs::read_to_string(d.path().join("place.toml")).unwrap();
+        assert_eq!(text, "[repos.b]\nurl = \"https://b\"\n");
     }
 
     #[test]

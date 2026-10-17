@@ -99,3 +99,32 @@ Feature: place remove
       Delete the entry from deps.repos yourself, then delete the checkout.
       """
     And the workplace directory "agents" exists
+
+  Scenario: Removing the first entry leaves the rest of the file as it was
+    Given a remote repository "https://github.com/ungood/agents.git"
+    And the workplace has the file "place.toml":
+      """
+      [repos.place]
+      url = "https://github.com/ungood/place.git"
+
+      [repos.agents]
+      url = "https://github.com/ungood/agents.git"
+      """
+    When I run "place remove place"
+    Then the command succeeds
+    And the workplace file "place.toml" is:
+      """
+      [repos.agents]
+      url = "https://github.com/ungood/agents.git"
+      """
+
+  Scenario: Directories left empty by a removed checkout are deleted
+    Given the workplace has the file "place.toml":
+      """
+      [repos."vendor/place"]
+      url = "https://github.com/ungood/place.git"
+      """
+    And "vendor/place" is a clone of "https://github.com/ungood/place.git"
+    When I run "place remove vendor/place"
+    Then the command succeeds
+    And the workplace directory "vendor" does not exist
