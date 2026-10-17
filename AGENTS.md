@@ -18,7 +18,10 @@ Skills live in `.agents/skills/`. `.claude/skills` is a symlink to that director
 - `features/`: Gherkin `.feature` files, one per command or capability, kebab-case. `features/README.md` holds the step vocabulary.
 - `tests/cucumber.rs`: the single cucumber-rs runner.
 - `tests/steps/`: step definitions, grouped by subject (remotes, workplace files, repos, running place, outcomes). `world.rs` holds the test world and its isolated git environment.
-- `src/main.rs`: the CLI. It currently parses every M0 command and reports that it isn't implemented.
+- `src/main.rs`: the CLI arguments and dispatch. Each command is in `src/commands/`.
+- `src/error.rs`: every error and warning place prints. Their wording is spec, so keep it in step with `features/`.
+- `src/git.rs`: the only module that runs git. Every clone goes through `git::clone`.
+- `src/config.rs` reads, merges and edits workplace files. `src/workplace.rs` finds workplaces, nested workplaces and unlisted checkouts. `src/state.rs` computes repo states.
 
 ## Conventions
 

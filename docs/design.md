@@ -17,7 +17,7 @@ Status: draft, 2026-10-15.
 
 ## Concepts
 
-- **Workplace.** A directory containing place configuration. Commands act on the workplace in the current directory, or in `-C <dir>`. They don't search parent directories, so running place inside a repo, or in a directory with no configuration, is an error. When there's a workplace further up, the error's help names it.
+- **Workplace.** A directory containing place configuration: `place.toml`, any `place.*.toml`, or a `*.repos` file. Commands act on the workplace in the current directory, or in `-C <dir>`. They don't search parent directories, so running place inside a repo, or in a directory with no configuration, is an error. When there's a workplace further up, the error's help names it.
 - **Repo.** A git checkout listed in the workplace configuration, keyed by its path relative to the workplace.
 - **Ref.** What a repo should track: a branch (the normal case), a tag, or a commit. A repo with no ref tracks the remote's default branch as it was when the repo was cloned.
 - **Nested workplace.** A repo that contains its own place configuration. place recurses into it, and its repos are resolved relative to its own directory. Parents never need to know about grandchildren.
@@ -92,7 +92,7 @@ place never writes `.repos` files. A later `place export --format repos` can pro
 - **elsewhere**: HEAD is on another branch, or detached away from the ref.
 - **dirty**: the working tree has uncommitted changes. Untracked files count.
 - **ahead / behind / diverged**: the ref's branch compared with its remote-tracking branch.
-- **default moved**: the repo has no ref, and the remote's default branch is no longer the one it was cloned with. place reports this and never switches branches because of it.
+- **default moved**: the repo has no ref, and the remote's default branch is no longer the one it was cloned with. place reports this and never switches branches because of it. The branch it was cloned with is git's `refs/remotes/<remote>/HEAD`, which fetch leaves alone. When place fetches a repo with no ref, it also records the remote's current default branch as the symbolic ref `refs/place/<remote>/HEAD`, so status can compare the two without touching the network.
 - **unlisted**: a git checkout directly inside the workplace that no configuration lists.
 
 These combine. A repo can be elsewhere and dirty at the same time.
@@ -101,7 +101,7 @@ place records URLs exactly as given, the way Cargo and Go do. Each machine can c
 
 ## Commands (M0)
 
-Global flags: `-C <dir>`, `-E/--env <env>`, `-j/--jobs <n>`, `-q/--quiet`, `-v/--verbose`.
+Global flags: `-C <dir>`, `-E/--env <env>`, `-j/--jobs <n>`, `-q/--quiet`, `-v/--verbose`. `-E/--env` goes before the command, as in `place -E ci sync`, because `place add` has its own `-e/--env`.
 
 ### place init
 
@@ -138,6 +138,12 @@ If the entry comes from a `.repos` file, `remove` fails, because place doesn't w
 
 Prints the state of every repo, including nested workplaces. By default it doesn't touch the network, like `git status`. `--fetch` fetches first.
 
+`--json` prints one object with a `repos` array. Each repo has its `path` relative to the workplace, its `url` and `ref` (`null` for an unlisted repo, or when there's no ref), and its `states`, named exactly as in [Repo state](#repo-state):
+
+```json
+{"repos": [{"path": "place", "url": "https://github.com/ungood/place.git", "ref": null, "states": ["on ref", "dirty"]}]}
+```
+
 The exit code is 0 unless place itself fails. With `--exit-code`, it is 1 when any repo isn't clean and on its ref, like `git diff --exit-code`.
 
 ### place sync
@@ -169,7 +175,7 @@ Checks the workplace and exits non-zero when it finds problems:
 
 ## Recursion
 
-A repo is a nested workplace when its root contains `place.toml`, `place.local.toml` or a `*.repos` file. `sync` and `status` recurse into nested workplaces by default. A repo can't be listed by two workplaces, because every path lies inside exactly one parent, so no conflict resolution is needed.
+A repo is a nested workplace when its root contains place configuration, as defined under [Concepts](#concepts). `sync` and `status` recurse into nested workplaces by default. A repo can't be listed by two workplaces, because every path lies inside exactly one parent, so no conflict resolution is needed.
 
 Running place inside a nested workplace acts on that workplace and its descendants only. Parent workplaces aren't loaded.
 
