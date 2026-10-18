@@ -18,6 +18,24 @@ pub fn progress(quiet: bool, path: &str, message: &str) {
     }
 }
 
+/// Print a repo's path on its own line and `lines` indented under it,
+/// unless `--quiet` was given.
+pub fn block(quiet: bool, path: &str, lines: &[String]) {
+    if !quiet {
+        eprintln!("{}", indented(&style(path).bold().to_string(), lines));
+    }
+}
+
+/// `heading` on its own line and `lines` indented under it.
+pub fn indented(heading: &str, lines: &[String]) -> String {
+    let mut text = heading.to_string();
+    for line in lines.iter().flat_map(|l| l.lines()) {
+        text.push_str("\n  ");
+        text.push_str(line);
+    }
+    text
+}
+
 /// Run `f` on every item with up to `jobs` threads, and return the results
 /// in the order of the items.
 pub fn parallel<T: Sync, R: Send>(items: &[T], jobs: usize, f: impl Fn(&T) -> R + Sync) -> Vec<R> {

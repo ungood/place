@@ -165,3 +165,60 @@ Feature: place status
     When I run "place status"
     Then the command succeeds
     And place doesn't report "place" as "dirty"
+
+  Scenario: status describes each repo in git's words
+    Given a remote repository "https://github.com/ungood/agents.git"
+    And the workplace has the file "place.toml":
+      """
+      [repos.place]
+      url = "https://github.com/ungood/place.git"
+
+      [repos.agents]
+      url = "https://github.com/ungood/agents.git"
+      """
+    And "place" is a clone of "https://github.com/ungood/place.git"
+    And "place" is on a new branch "feature/x"
+    And "place" has an uncommitted change
+    When I run "place status"
+    Then the command succeeds
+    And place prints:
+      """
+      agents
+        Not cloned yet.
+      place
+        On branch feature/x, not main
+        You have uncommitted changes.
+      """
+
+  Scenario: status --fetch shows what the fetch brought in
+    Given "place" is a clone of "https://github.com/ungood/place.git"
+    And the remote "https://github.com/ungood/place.git" has a new commit on "main"
+    When I run "place status --fetch"
+    Then the command succeeds
+    And place prints:
+      """
+      fa853e7..8335079 main -> origin/main
+      On branch main
+      Your branch is behind 'origin/main' by 1 commit.
+      """
+
+  Scenario Outline: status --short prints one line per repo
+    Given "place" is a clone of "https://github.com/ungood/place.git"
+    And <setup>
+    When I run "place status <flag>"
+    Then the command succeeds
+    And place prints:
+      """
+      place  <line>
+      """
+
+    Examples:
+      | flag    | setup                                     | line                                         |
+      | --short | "place" has an uncommitted change         | main, up to date; uncommitted changes        |
+      | -s      | "place" has a local commit on "main"      | main [ahead 1]                               |
+      | -s      | "place" is on a new branch "feature/x"    | on feature/x, not main                       |
+      | -s      | the origin of "place" is "https://github.com/nobody/other.git" | origin is https://github.com/nobody/other.git, not https://github.com/ungood/place.git |
+
+  Scenario: status --short and --json can't be combined
+    When I run "place status --short --json"
+    Then the command fails

@@ -9,6 +9,7 @@ mod config;
 mod error;
 mod git;
 mod output;
+mod report;
 mod state;
 mod url;
 mod workplace;
@@ -188,8 +189,12 @@ enum Command {
         #[arg(long)]
         fetch: bool,
 
+        /// Print one line per repo.
+        #[arg(short, long)]
+        short: bool,
+
         /// Print JSON for other tools.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "short")]
         json: bool,
 
         /// Exit with 1 when any repo isn't clean and on its ref.
@@ -210,6 +215,10 @@ enum Command {
         /// Sync only these repos, and the repos of nested workplaces in them.
         #[arg(value_name = "PATH", help_heading = "Arguments")]
         paths: Vec<String>,
+
+        /// Print one line per repo instead of git's output.
+        #[arg(short, long)]
+        short: bool,
     },
 
     /// Check the workplace's configuration and layout for problems.
@@ -280,10 +289,11 @@ fn run(cli: Cli) -> Result<ExitCode, error::Error> {
         Command::Status {
             paths,
             fetch,
+            short,
             json,
             exit_code,
-        } => commands::status::run(&ctx, &paths, fetch, json, exit_code),
-        Command::Sync { paths } => commands::sync::run(&ctx, &paths),
+        } => commands::status::run(&ctx, &paths, fetch, short, json, exit_code),
+        Command::Sync { paths, short } => commands::sync::run(&ctx, &paths, short),
         Command::Doctor => commands::doctor::run(&ctx),
     }
 }

@@ -81,6 +81,12 @@ async fn output_says(world: &mut PlaceWorld, step: &Step) {
     assert_contains(world, &stdout, step, "output");
 }
 
+#[then("place prints:")]
+async fn place_prints(world: &mut PlaceWorld, step: &Step) {
+    let output = normalize(&format!("{} {}", world.stdout(), world.stderr()));
+    assert_contains(world, &output, step, "output");
+}
+
 /// The states `place status --json` reports for a repo. The JSON has the
 /// shape `{"repos": [{"path": "place", "states": ["on ref", "dirty"]}]}`.
 async fn states(world: &PlaceWorld, path: &str) -> Vec<String> {

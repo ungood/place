@@ -17,6 +17,10 @@ Feature: place sync
     Then the command succeeds
     And "place" is a clone of "https://github.com/ungood/place.git"
     And "place" is checked out on "main"
+    And place prints:
+      """
+      Cloning into 'place'...
+      """
 
   Scenario Outline: Missing repos are cloned at their ref
     Given the remote "https://github.com/ungood/place.git" has a branch "develop"
@@ -30,6 +34,10 @@ Feature: place sync
     When I run "place sync"
     Then the command succeeds
     And "place" is <checkout>
+    And place prints:
+      """
+      Cloning into 'place'...
+      """
 
     Examples:
       | ref                                      | checkout                   |
@@ -44,6 +52,21 @@ Feature: place sync
     When I run "place sync"
     Then the command succeeds
     And "place" is at the remote's latest commit on "main"
+    And place prints:
+      """
+      main -> origin/main
+      Fast-forward
+      """
+
+  Scenario: A clean repo already on its remote's latest commit is up to date
+    Given "place" is a clone of "https://github.com/ungood/place.git"
+    When I run "place sync"
+    Then the command succeeds
+    And place prints:
+      """
+      On branch main
+      Your branch is up to date with 'origin/main'.
+      """
 
   Scenario: A dirty repo is fetched but not moved
     Given "place" is a clone of "https://github.com/ungood/place.git"
@@ -53,6 +76,12 @@ Feature: place sync
     Then the command succeeds
     And "place" still has its uncommitted change
     And place reports "place" as "behind"
+    And place prints:
+      """
+      Your branch is behind 'origin/main' by 1 commit.
+      You have uncommitted changes.
+      place didn't fast-forward it, to leave your changes alone.
+      """
 
   Scenario: A repo on another branch stays there, and its ref's branch is fast-forwarded
     Given "place" is a clone of "https://github.com/ungood/place.git"
@@ -62,6 +91,55 @@ Feature: place sync
     Then the command succeeds
     And "place" is checked out on "feature/x"
     And the local branch "main" of "place" is at the remote's latest commit on "main"
+    And place prints:
+      """
+      origin/main -> main
+      On branch feature/x, not main
+      """
+
+  Scenario: A repo with a detached HEAD is left alone
+    Given "place" is a clone of "https://github.com/ungood/place.git"
+    And "place" has a detached HEAD
+    When I run "place sync"
+    Then the command succeeds
+    And place prints:
+      """
+      HEAD detached at
+      not main
+      """
+
+  Scenario: A repo at its pinned tag has nothing to update
+    Given the remote "https://github.com/ungood/place.git" has a tag "v1.0"
+    And the workplace has the file "place.toml":
+      """
+      [repos.place]
+      url = "https://github.com/ungood/place.git"
+      ref = "v1.0"
+      """
+    And "place" is a clone of "https://github.com/ungood/place.git"
+    And "place" has a detached HEAD
+    When I run "place sync"
+    Then the command succeeds
+    And place prints:
+      """
+      HEAD detached at v1.0
+      """
+
+  Scenario: A repo whose ref's branch isn't on the remote says so
+    Given the workplace has the file "place.toml":
+      """
+      [repos.place]
+      url = "https://github.com/ungood/place.git"
+      ref = "develop"
+      """
+    And "place" is a clone of "https://github.com/ungood/place.git"
+    And "place" is on a new branch "develop"
+    When I run "place sync"
+    Then the command succeeds
+    And place prints:
+      """
+      origin has no branch 'develop'.
+      """
 
   Scenario: A repo that's ahead is left alone
     Given "place" is a clone of "https://github.com/ungood/place.git"
@@ -69,6 +147,10 @@ Feature: place sync
     When I run "place sync"
     Then the command succeeds
     And place reports "place" as "ahead"
+    And place prints:
+      """
+      Your branch is ahead of 'origin/main' by 1 commit.
+      """
 
   Scenario: A diverged repo is left alone and fails the sync
     Given "place" is a clone of "https://github.com/ungood/place.git"
@@ -135,6 +217,10 @@ Feature: place sync
     Then the command succeeds
     And "place" is checked out on "main"
     And place reports "place" as "default moved"
+    And place prints:
+      """
+      origin's default branch is now trunk, but this repo still follows main.
+      """
 
   Scenario: sync recurses into nested workplaces
     Given a remote repository "https://github.com/ungood/agents.git"
@@ -154,3 +240,48 @@ Feature: place sync
     When I run "place sync"
     Then the command succeeds
     And "stray" is not at the remote's latest commit on "main"
+
+  Scenario Outline: --short prints one line per repo
+    Given "place" is a clone of "https://github.com/ungood/place.git"
+    And <setup>
+    When I run "place sync --short"
+    Then the command succeeds
+    And place prints:
+      """
+      place  <line>
+      """
+
+    Examples:
+      | setup                                                                       | line                                 |
+      | "place" has a local commit on "main"                                        | main [ahead 1]                       |
+      | "place" has a detached HEAD                                                 | detached at fa853e7, not main        |
+      | the remote "https://github.com/ungood/place.git" has a new commit on "main" | main fa853e7..8335079 (fast-forward) |
+
+  Scenario: --short says a repo on its ref's latest commit is up to date
+    Given "place" is a clone of "https://github.com/ungood/place.git"
+    When I run "place sync -s"
+    Then the command succeeds
+    And place prints:
+      """
+      place  main, up to date
+      """
+
+  Scenario: --short says what changed and what was left alone
+    Given "place" is a clone of "https://github.com/ungood/place.git"
+    And "place" is on a new branch "feature/x"
+    And "place" has an uncommitted change
+    And the remote "https://github.com/ungood/place.git" has a new commit on "main"
+    When I run "place sync --short"
+    Then the command succeeds
+    And place prints:
+      """
+      place  on feature/x, not main; uncommitted changes; main fa853e7..8335079 (fast-forward)
+      """
+
+  Scenario: --short reports a clone
+    When I run "place sync --short"
+    Then the command succeeds
+    And place prints:
+      """
+      place  cloned
+      """
