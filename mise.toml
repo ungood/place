@@ -1,5 +1,6 @@
 [tools]
 rust = { version = "1.99.0", components = "clippy,rustfmt" }
+git-cliff = "2.14.2"
 
 [tasks.build]
 description = "Build the place binary"
@@ -24,6 +25,14 @@ run = ["cargo fmt --check", "cargo clippy --all-targets -- -D warnings"]
 [tasks.fmt]
 description = "Format the code"
 run = "cargo fmt"
+
+[tasks."release:version"]
+description = "Print the version the next release would get, from the commits since the last"
+run = "git cliff --bumped-version"
+
+[tasks."release:notes"]
+description = "Print the notes for the next release"
+run = "git cliff --unreleased --strip all"
 
 [tasks.dist]
 description = "Build a release archive for this platform in dist/"
