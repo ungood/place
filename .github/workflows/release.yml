@@ -1,40 +1,65 @@
 name: Release
 
-# Push a tag such as v0.1.0, matching the version in Cargo.toml, to release.
+# Every push to main releases if a feat or fix commit has landed since the
+# last v* tag. semantic-release picks the version from those commits, tags
+# the pushed commit and drafts the GitHub release (see .releaserc.json).
+# Nothing is committed back: Cargo.toml keeps a placeholder, and build.rs
+# takes the version from the tag. The archives are then built from the tag
+# and published with packslip.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+
+# One release at a time, in the order of the pushes.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  draft:
+  tag:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
-      - name: Check the tag matches Cargo.toml
-        run: grep -qx "version = \"${GITHUB_REF_NAME#v}\"" Cargo.toml
-      - run: gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes
+        with:
+          fetch-depth: 0
+      - uses: jdx/mise-action@v5
+        with:
+          install: false
+      - name: Tag and draft the release
+        run: mise exec node@24 -- npx --yes semantic-release@25
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+      - id: tag
+        name: Find the new tag, if any
+        run: echo "tag=$(git tag --points-at HEAD --list 'v[0-9]*' | head -n 1)" >> "$GITHUB_OUTPUT"
 
   build:
-    needs: draft
+    needs: tag
+    if: needs.tag.outputs.tag != ''
     strategy:
       matrix:
         runner: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
     runs-on: ${{ matrix.runner }}
     steps:
+      # build.rs needs the tag to know the version.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.tag.outputs.tag }}
+          fetch-depth: 0
       - uses: jdx/mise-action@v5
       - run: mise run dist
-      - run: gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz
+      - run: gh release upload "$TAG" dist/*.tar.gz
         env:
+          TAG: ${{ needs.tag.outputs.tag }}
           GH_TOKEN: ${{ github.token }}
 
   publish:
-    needs: build
+    needs: [tag, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -43,8 +68,11 @@ jobs:
     steps:
       - uses: jdx/packslip@v1
         with:
+          tag: ${{ needs.tag.outputs.tag }}
+          commit: ${{ github.sha }}
           download: place-*.tar.gz
           bin: place
-      - run: gh release edit "$GITHUB_REF_NAME" --draft=false --repo "$GITHUB_REPOSITORY"
+      - run: gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
         env:
+          TAG: ${{ needs.tag.outputs.tag }}
           GH_TOKEN: ${{ github.token }}

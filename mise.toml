@@ -31,8 +31,8 @@ run = '''
 #!/usr/bin/env bash
 set -euo pipefail
 cargo build --release --locked
-pkgid=$(cargo pkgid)
-version=${pkgid##*[#@]}
+# build.rs takes the version from git, so ask the binary rather than Cargo.toml.
+version=$(target/release/place --version | cut -d' ' -f2)
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 mkdir -p dist
 tar -czf "dist/place-$version-$os-$(uname -m).tar.gz" -C target/release place
