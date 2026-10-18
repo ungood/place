@@ -35,24 +35,6 @@ pub enum State {
     Unlisted,
 }
 
-impl State {
-    pub fn name(self) -> &'static str {
-        match self {
-            State::Missing => "missing",
-            State::NotARepo => "not a repo",
-            State::WrongRemote => "wrong remote",
-            State::OnRef => "on ref",
-            State::Elsewhere => "elsewhere",
-            State::Dirty => "dirty",
-            State::Ahead => "ahead",
-            State::Behind => "behind",
-            State::Diverged => "diverged",
-            State::DefaultMoved => "default moved",
-            State::Unlisted => "unlisted",
-        }
-    }
-}
-
 /// The ref's branch compared with its remote-tracking branch.
 #[derive(Debug, Clone)]
 pub struct Tracking {
@@ -79,6 +61,8 @@ pub struct Inspection {
     /// The URL of origin, or of the only remote, when no remote matches.
     pub actual_url: Option<String>,
     pub checked_out: Option<String>,
+    /// The commit HEAD is at.
+    pub head: Option<String>,
     pub tracking: Option<Tracking>,
     /// The remote's current default branch, when it has moved away from the
     /// one the repo was cloned with.
@@ -91,6 +75,7 @@ impl Inspection {
             states: vec![state],
             actual_url: None,
             checked_out: None,
+            head: None,
             tracking: None,
             new_default: None,
         }
@@ -122,37 +107,37 @@ fn match_remote(dir: &Path, wanted: &str) -> Result<Result<String, Option<String
 
 /// Inspect the repo for `entry` at `dir`, fetching first if `fetch` is set.
 /// `nested` lists the checkouts of a nested workplace in the repo, which
-/// don't make it dirty. A failed fetch is returned as git's message
-/// alongside the inspection.
+/// don't make it dirty. Alongside the inspection is what the fetch printed,
+/// or git's message if it failed.
 pub fn inspect(
     dir: &Path,
     entry: &Entry,
     nested: &[String],
     fetch: bool,
-) -> Result<(Inspection, Option<String>), Error> {
+) -> Result<(Inspection, Result<String, String>), Error> {
     if !dir.exists() {
-        return Ok((Inspection::only(State::Missing), None));
+        return Ok((Inspection::only(State::Missing), Ok(String::new())));
     }
     if !git::is_checkout(dir) {
-        return Ok((Inspection::only(State::NotARepo), None));
+        return Ok((Inspection::only(State::NotARepo), Ok(String::new())));
     }
     let remote = match match_remote(dir, &entry.url)? {
         Ok(remote) => remote,
         Err(actual) => {
             let mut inspection = Inspection::only(State::WrongRemote);
             inspection.actual_url = actual;
-            return Ok((inspection, None));
+            return Ok((inspection, Ok(String::new())));
         }
     };
-    let fetch_error = if fetch {
-        git::fetch(dir, &remote, entry.reference.is_none()).err()
+    let fetched = if fetch {
+        git::fetch(dir, &remote, entry.reference.is_none())
     } else {
-        None
+        Ok(String::new())
     };
     let copy = WorkingCopy::read(dir, nested)?;
     let refs = Refs::read(dir)?;
     let inspection = compute(dir, entry, remote, &copy, &refs)?;
-    Ok((inspection, fetch_error))
+    Ok((inspection, fetched))
 }
 
 fn compute(
@@ -242,6 +227,7 @@ fn compute(
         states,
         actual_url: None,
         checked_out: copy.branch.clone(),
+        head: copy.head.clone(),
         tracking,
         new_default,
     })

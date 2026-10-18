@@ -1,9 +1,11 @@
 use std::process::ExitCode;
 
-use console::{Style, style};
+use console::style;
 use serde::Serialize;
 
+use crate::config::Entry;
 use crate::error::Error;
+use crate::report;
 use crate::state::{self, Inspection, State};
 use crate::workplace::{Workplace, check_selection, selected};
 use crate::{Context, output};
@@ -18,6 +20,11 @@ pub struct Row {
     pub states: Vec<State>,
     #[serde(skip)]
     pub inspection: Option<Inspection>,
+    #[serde(skip)]
+    pub entry: Option<Entry>,
+    /// What `--fetch` printed.
+    #[serde(skip)]
+    pub fetched: String,
 }
 
 #[derive(Serialize)]
@@ -29,6 +36,7 @@ pub fn run(
     ctx: &Context,
     filters: &[String],
     fetch: bool,
+    short: bool,
     json: bool,
     exit_code: bool,
 ) -> Result<ExitCode, Error> {
@@ -40,8 +48,10 @@ pub fn run(
     if json {
         let text = serde_json::to_string_pretty(&Json { repos: &rows }).expect("status is JSON");
         println!("{text}");
+    } else if short {
+        print_short(&rows);
     } else {
-        print(&rows);
+        print_long(&rows);
     }
 
     let unclean = rows
@@ -77,20 +87,23 @@ fn collect(
         )
     });
     for ((path, entry), result) in entries.into_iter().zip(results) {
-        let (inspection, fetch_error) = result?;
+        let (inspection, fetched) = result?;
         let display = workplace.display(path);
-        if let Some(message) = fetch_error {
+        let fetched = fetched.unwrap_or_else(|message| {
             output::error(Error::FetchFailed {
                 path: display.clone(),
                 message,
             });
-        }
+            String::new()
+        });
         rows.push(Row {
             path: display,
             url: Some(entry.url.clone()),
             reference: entry.reference.clone(),
             states: inspection.states.clone(),
             inspection: Some(inspection),
+            entry: Some((*entry).clone()),
+            fetched,
         });
         if let Some(nested) = workplace.nested(path, &ctx.envs)? {
             collect(ctx, &nested, filters, fetch, rows)?;
@@ -105,52 +118,40 @@ fn collect(
                 reference: None,
                 states: vec![State::Unlisted],
                 inspection: None,
+                entry: None,
+                fetched: String::new(),
             });
         }
     }
     Ok(())
 }
 
-fn state_style(state: State) -> Style {
-    match state {
-        State::OnRef => Style::new().green(),
-        State::Missing | State::NotARepo | State::WrongRemote | State::Diverged => {
-            Style::new().red()
-        }
-        State::Unlisted => Style::new().dim(),
-        _ => Style::new().yellow(),
-    }
-}
-
-fn describe(row: &Row, state: State) -> String {
-    let tracking = row.inspection.as_ref().and_then(|i| i.tracking.as_ref());
-    match (state, tracking) {
-        (State::Ahead, Some(t)) => format!("ahead by {}", t.ahead),
-        (State::Behind, Some(t)) => format!("behind by {}", t.behind),
-        (State::Diverged, Some(t)) => {
-            format!("diverged ({} ahead, {} behind)", t.ahead, t.behind)
-        }
-        (State::Elsewhere, _) => match row.inspection.as_ref().and_then(|i| i.checked_out.as_ref())
-        {
-            Some(branch) => format!("elsewhere on {branch}"),
-            None => "elsewhere, detached".into(),
-        },
-        _ => state.name().into(),
-    }
-}
-
-fn print(rows: &[Row]) {
+fn print_short(rows: &[Row]) {
     let width = rows.iter().map(|r| r.path.len()).max().unwrap_or(0);
     for row in rows {
-        let states: Vec<String> = row
-            .states
-            .iter()
-            .map(|s| state_style(*s).apply_to(describe(row, *s)).to_string())
-            .collect();
+        let summary = match (&row.inspection, &row.entry) {
+            (Some(inspection), Some(entry)) => report::short(inspection, entry),
+            _ => "not listed".into(),
+        };
         println!(
             "{}  {}",
             style(format!("{:width$}", row.path)).bold(),
-            states.join(", ")
+            report::tone(&row.states).apply_to(summary)
         );
+    }
+}
+
+fn print_long(rows: &[Row]) {
+    for row in rows {
+        let mut lines: Vec<String> = Some(row.fetched.clone())
+            .filter(|f| !f.is_empty())
+            .into_iter()
+            .collect();
+        match (&row.inspection, &row.entry) {
+            (Some(inspection), Some(entry)) => lines.extend(report::long(inspection, entry)),
+            _ => lines.push("Not listed in any workplace file.".into()),
+        }
+        let heading = report::tone(&row.states).bold().apply_to(&row.path);
+        println!("{}", output::indented(&heading.to_string(), &lines));
     }
 }

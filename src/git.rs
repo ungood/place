@@ -81,12 +81,17 @@ fn looks_like_commit(name: &str) -> bool {
 
 /// Clone `url` into `dest`, then check out `reference` if one is given.
 /// Every clone goes through here, so a shared repo cache can be added later.
-/// On failure, the error is git's own message.
-pub fn clone(url: &str, dest: &Path, reference: Option<&str>) -> Result<(), String> {
+/// Returns what git printed. On failure, the error is git's own message.
+pub fn clone(url: &str, dest: &Path, reference: Option<&str>) -> Result<String, String> {
     let parent = dest.parent().unwrap_or(Path::new("."));
     std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    let dest_arg = dest.display().to_string();
-    let mut args = vec!["clone", "--quiet"];
+    // Clone by name from the parent, so git says "Cloning into 'place'"
+    // rather than naming an absolute path.
+    let dest_arg = dest.file_name().map_or_else(
+        || dest.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    let mut args = vec!["clone"];
     if reference.is_some() {
         args.push("--no-checkout");
     }
@@ -95,8 +100,9 @@ pub fn clone(url: &str, dest: &Path, reference: Option<&str>) -> Result<(), Stri
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
+    let printed = printed(&output);
     let Some(reference) = reference else {
-        return Ok(());
+        return Ok(printed);
     };
     let refs = Refs::read(dest).map_err(|e| e.to_string())?;
     let checkout: Vec<String> = match refs.resolve(reference, "origin") {
@@ -137,7 +143,14 @@ pub fn clone(url: &str, dest: &Path, reference: Option<&str>) -> Result<(), Stri
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
-    Ok(())
+    Ok(printed)
+}
+
+/// Everything git printed, stdout then stderr, without trailing blank lines.
+fn printed(output: &Output) -> String {
+    let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
+    text.push_str(&String::from_utf8_lossy(&output.stderr));
+    text.trim_end().to_string()
 }
 
 /// The remotes of a checkout, as `(name, url)` with URLs as configured.
@@ -164,14 +177,16 @@ fn remote_head_ref(remote: &str) -> String {
 
 /// Fetch `remote`. With `track_default`, also record which branch the
 /// remote's HEAD points to, so status can tell when the default moved.
-/// On failure, the error is git's own message.
-pub fn fetch(dir: &Path, remote: &str, track_default: bool) -> Result<(), String> {
-    let output = run(dir, &["fetch", "--quiet", "--prune", remote]).map_err(|e| e.to_string())?;
+/// Returns what git printed, which is nothing when nothing changed. On
+/// failure, the error is git's own message.
+pub fn fetch(dir: &Path, remote: &str, track_default: bool) -> Result<String, String> {
+    let output = run(dir, &["fetch", "--prune", remote]).map_err(|e| e.to_string())?;
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
+    let printed = printed(&output);
     if !track_default {
-        return Ok(());
+        return Ok(printed);
     }
     let output = run(dir, &["ls-remote", "--symref", remote, "HEAD"]).map_err(|e| e.to_string())?;
     let text = String::from_utf8_lossy(&output.stdout);
@@ -185,7 +200,7 @@ pub fn fetch(dir: &Path, remote: &str, track_default: bool) -> Result<(), String
         stdout(dir, &["symbolic-ref", &remote_head_ref(remote), &target])
             .map_err(|e| e.to_string())?;
     }
-    Ok(())
+    Ok(printed)
 }
 
 /// A ref and what it points to.
@@ -343,16 +358,28 @@ pub fn ahead_behind(dir: &Path, local: &str, remote: &str) -> Result<(u32, u32),
     Ok((counts.next().unwrap_or(0), counts.next().unwrap_or(0)))
 }
 
-/// Fast-forward the checked-out branch to `to`.
-pub fn fast_forward_head(dir: &Path, to: &str) -> Result<(), Error> {
-    stdout(dir, &["merge", "--ff-only", "--quiet", to]).map(drop)
+/// Fast-forward the checked-out branch to `to`, and return what git printed.
+pub fn fast_forward_head(dir: &Path, to: &str) -> Result<String, Error> {
+    let args = ["merge", "--ff-only", to];
+    let output = run(dir, &args)?;
+    if !output.status.success() {
+        return Err(failed(dir, &args, &output));
+    }
+    Ok(printed(&output))
 }
 
-/// Move a branch that isn't checked out from `from` to `to`. git refuses if
-/// the branch moved in the meantime.
-pub fn fast_forward_branch(dir: &Path, branch: &str, from: &str, to: &str) -> Result<(), Error> {
-    let name = format!("refs/heads/{branch}");
-    stdout(dir, &["update-ref", &name, to, from]).map(drop)
+/// Fast-forward `branch`, which isn't checked out, to its remote-tracking
+/// branch, and return what git printed. Fetching from the repo itself moves
+/// the branch without touching the working tree, and git refuses anything
+/// that isn't a fast-forward or a branch checked out in any worktree.
+pub fn fast_forward_branch(dir: &Path, remote: &str, branch: &str) -> Result<String, Error> {
+    let refspec = format!("refs/remotes/{remote}/{branch}:refs/heads/{branch}");
+    let args = ["fetch", ".", &refspec];
+    let output = run(dir, &args)?;
+    if !output.status.success() {
+        return Err(failed(dir, &args, &output));
+    }
+    Ok(printed(&output))
 }
 
 /// Local branches with commits that no remote-tracking branch contains.

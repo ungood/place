@@ -5,15 +5,17 @@ use console::style;
 
 use crate::config::Entry;
 use crate::error::Error;
-use crate::state::{self, Inspection, State, Tracking};
+use crate::report;
+use crate::state::{self, State};
 use crate::workplace::{Workplace, check_selection, selected};
 use crate::{Context, output};
 use crate::{config, git};
 
-pub fn run(ctx: &Context, filters: &[String]) -> Result<ExitCode, Error> {
+pub fn run(ctx: &Context, filters: &[String], short: bool) -> Result<ExitCode, Error> {
     let workplace = Workplace::open(&ctx.dir, &ctx.envs)?;
     check_selection(&workplace, filters)?;
     let mut tally = Tally {
+        short,
         width: width(
             &workplace.dir,
             "",
@@ -41,6 +43,8 @@ pub fn run(ctx: &Context, filters: &[String]) -> Result<ExitCode, Error> {
 struct Tally {
     repos: usize,
     errors: Vec<Error>,
+    /// One line per repo, rather than git's output and a description.
+    short: bool,
     /// The width of the longest path, to line up the progress lines.
     width: usize,
 }
@@ -81,16 +85,26 @@ fn sync(
         sync_repo(workplace, path, entry)
     });
     for ((path, _), result) in entries.into_iter().zip(results) {
-        let display = format!("{:1$}", workplace.display(path), tally.width);
+        let display = workplace.display(path);
         tally.repos += 1;
-        match result {
-            Ok(message) => output::progress(ctx.quiet, &display, &message),
+        let (synced, err) = match result {
+            Ok(synced) => (synced, None),
             Err(err) => {
-                let message = style("failed, see below").red().to_string();
-                output::progress(ctx.quiet, &display, &message);
-                tally.errors.push(err);
+                let failed = style("failed, see below").red().to_string();
+                let synced = Synced {
+                    short: failed.clone(),
+                    long: vec![failed],
+                };
+                (synced, Some(err))
             }
+        };
+        if tally.short {
+            let display = format!("{display:0$}", tally.width);
+            output::progress(ctx.quiet, &display, &synced.short);
+        } else {
+            output::block(ctx.quiet, &display, &synced.long);
         }
+        tally.errors.extend(err);
         if let Some(nested) = workplace.nested(path, &ctx.envs)? {
             sync(ctx, &nested, filters, tally)?;
         }
@@ -98,154 +112,105 @@ fn sync(
     Ok(())
 }
 
-/// Bring one repo in line with its entry, and say what happened.
-fn sync_repo(workplace: &Workplace, path: &str, entry: &Entry) -> Result<String, Error> {
-    let dir = workplace.dir.join(path);
-    let display = workplace.display(path);
-    let (inspection, fetch_error) =
-        state::inspect(&dir, entry, &workplace.nested_paths(path), true)?;
-
-    if inspection.has(State::Missing) {
-        git::clone(&entry.url, &dir, entry.reference.as_deref()).map_err(|message| {
-            Error::CloneFailed {
-                path: display,
-                url: entry.url.clone(),
-                message,
-            }
-        })?;
-        return Ok(match &entry.reference {
-            Some(reference) => format!("wasn't here; cloned {reference} from {}", entry.url),
-            None => format!("wasn't here; cloned it from {}", entry.url),
-        });
-    }
-    if inspection.has(State::NotARepo) {
-        return Err(Error::NotARepo { path: display });
-    }
-    if inspection.has(State::WrongRemote) {
-        return Err(Error::WrongRemote {
-            path: display,
-            actual: inspection
-                .actual_url
-                .unwrap_or_else(|| "a different repository".into()),
-            expected: entry.url.clone(),
-            file: entry.file().into(),
-        });
-    }
-    if let Some(message) = fetch_error {
-        return Err(Error::FetchFailed {
-            path: display,
-            message,
-        });
-    }
-
-    // Each note says what place found and what it did about it.
-    let mut notes = Vec::new();
-    let elsewhere = inspection.has(State::Elsewhere);
-    let wanted = match &inspection.tracking {
-        Some(t) => Some(t.branch.as_str()),
-        None => entry.reference.as_deref(),
-    };
-    if elsewhere {
-        notes.push(match (&inspection.checked_out, wanted) {
-            (Some(branch), Some(wanted)) => {
-                format!("on branch {branch}, not {wanted}; left it alone")
-            }
-            (Some(branch), None) => format!("on branch {branch}; left it alone"),
-            (None, Some(wanted)) => format!("detached HEAD, not {wanted}; left it alone"),
-            (None, None) => "detached HEAD; left it alone".into(),
-        });
-    }
-    match &inspection.tracking {
-        Some(t) => {
-            if let Some(note) = sync_branch(&dir, &display, &inspection, t)? {
-                notes.push(note);
-            }
-        }
-        None if !elsewhere => {
-            let reference = entry.reference.as_deref().unwrap_or("its ref");
-            notes.push(format!(
-                "at {reference}, as {} pins it; nothing to update",
-                entry.file()
-            ));
-        }
-        None => {}
-    }
-    if let (Some(t), Some(new_default)) = (&inspection.tracking, &inspection.new_default) {
-        notes.push(format!(
-            "{}'s default branch moved from {} to {new_default}; kept following {} (set a ref in {} to switch)",
-            t.remote,
-            t.branch,
-            t.branch,
-            entry.file()
-        ));
-    }
-    Ok(if notes.is_empty() {
-        "nothing to update".into()
-    } else {
-        notes.join("; ")
-    })
+/// What syncing one repo did, said both ways.
+struct Synced {
+    /// One line, such as `main 8006fac..d490938 (fast-forward)`.
+    short: String,
+    /// What git printed, then how the repo stands if that needs saying.
+    long: Vec<String>,
 }
 
-/// Fast-forward the ref's branch if it's safely behind its remote, and say
-/// how it compares. Returns `None` when there's nothing worth saying.
-fn sync_branch(
-    dir: &Path,
-    display: &str,
-    inspection: &Inspection,
-    t: &Tracking,
-) -> Result<Option<String>, Error> {
-    let upstream_name = t.upstream_name();
-    let (Some(local), Some(upstream)) = (&t.local, &t.upstream) else {
-        return Ok(match (&t.local, &t.upstream) {
-            (_, None) => Some(format!(
-                "{} has no branch {}; nothing to fast-forward to",
-                t.remote, t.branch
-            )),
-            // The branch was never checked out here, so there's nothing to update.
-            _ => None,
-        });
-    };
-    if t.ahead > 0 && t.behind > 0 {
-        return Err(Error::Diverged {
-            path: display.into(),
-            branch: t.branch.clone(),
-            upstream: upstream_name,
-        });
-    }
-    let commits = |n: u32| {
-        if n == 1 {
-            "1 commit".into()
-        } else {
-            format!("{n} commits")
-        }
-    };
-    let on_branch = inspection.checked_out.as_deref() == Some(t.branch.as_str());
-    Ok(Some(if t.behind > 0 {
-        if !on_branch {
-            git::fast_forward_branch(dir, &t.branch, local, upstream)?;
-        } else if inspection.has(State::Dirty) {
-            return Ok(Some(format!(
-                "{} is {} behind {upstream_name} but has uncommitted changes; didn't fast-forward it",
-                t.branch,
-                commits(t.behind)
-            )));
-        } else {
-            git::fast_forward_head(dir, upstream)?;
-        }
-        format!(
-            "fast-forwarded {} by {} to match {upstream_name}",
-            t.branch,
-            commits(t.behind)
-        )
-    } else if t.ahead > 0 {
-        format!(
-            "{} is {} ahead of {upstream_name}; left it for you to push",
-            t.branch,
-            commits(t.ahead)
-        )
-    } else if on_branch {
-        format!("on {}, up to date with {upstream_name}", t.branch)
+/// Bring one repo in line with its entry, and say what happened.
+fn sync_repo(workplace: &Workplace, path: &str, entry: &Entry) -> Result<Synced, Error> {
+    let dir = workplace.dir.join(path);
+    let display = workplace.display(path);
+    let nested = workplace.nested_paths(path);
+    let (mut inspection, fetched) = state::inspect(&dir, entry, &nested, true)?;
+
+    // What git printed, and a short note of each change place made.
+    let mut printed = Vec::new();
+    let mut changes = Vec::new();
+    let mut held_back = None;
+    if inspection.has(State::Missing) {
+        let output =
+            git::clone(&entry.url, &dir, entry.reference.as_deref()).map_err(|message| {
+                Error::CloneFailed {
+                    path: display,
+                    url: entry.url.clone(),
+                    message,
+                }
+            })?;
+        printed.push(output);
+        changes.push("cloned".to_string());
     } else {
-        return Ok(None);
-    }))
+        if inspection.has(State::NotARepo) {
+            return Err(Error::NotARepo { path: display });
+        }
+        if inspection.has(State::WrongRemote) {
+            return Err(Error::WrongRemote {
+                path: display,
+                actual: inspection
+                    .actual_url
+                    .unwrap_or_else(|| "a different repository".into()),
+                expected: entry.url.clone(),
+                file: entry.file().into(),
+            });
+        }
+        printed.push(fetched.map_err(|message| Error::FetchFailed {
+            path: display.clone(),
+            message,
+        })?);
+        if let Some(t) = &inspection.tracking
+            && let (Some(local), Some(upstream)) = (&t.local, &t.upstream)
+        {
+            if t.ahead > 0 && t.behind > 0 {
+                return Err(Error::Diverged {
+                    path: display,
+                    branch: t.branch.clone(),
+                    upstream: t.upstream_name(),
+                });
+            }
+            if t.ahead == 0 && t.behind > 0 {
+                let on_branch = inspection.checked_out.as_deref() == Some(t.branch.as_str());
+                let output = if !on_branch {
+                    Some(git::fast_forward_branch(&dir, &t.remote, &t.branch)?)
+                } else if inspection.has(State::Dirty) {
+                    held_back = Some(
+                        "place didn't fast-forward it, to leave your changes alone.".to_string(),
+                    );
+                    None
+                } else {
+                    Some(git::fast_forward_head(&dir, upstream)?)
+                };
+                if let Some(output) = output {
+                    printed.push(output);
+                    changes.push(format!(
+                        "{} {}..{} (fast-forward)",
+                        t.branch,
+                        report::abbrev(local),
+                        report::abbrev(upstream)
+                    ));
+                }
+            }
+        }
+    }
+    if !changes.is_empty() {
+        inspection = state::inspect(&dir, entry, &nested, false)?.0;
+    }
+
+    // After a change that left the repo clean and on its ref, git's output
+    // says it all. Otherwise, say how the repo stands.
+    let settled = !changes.is_empty() && inspection.states == [State::OnRef];
+    let mut short = Vec::new();
+    let mut long: Vec<String> = printed.into_iter().filter(|p| !p.is_empty()).collect();
+    if !settled {
+        short.push(report::short(&inspection, entry));
+        long.extend(report::long(&inspection, entry));
+        long.extend(held_back);
+    }
+    short.extend(changes);
+    Ok(Synced {
+        short: short.join("; "),
+        long,
+    })
 }

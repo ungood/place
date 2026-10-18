@@ -134,9 +134,11 @@ If the entry comes from a `.repos` file, `remove` fails, because place doesn't w
 
 ### place status
 
-`place status [<path>...] [--fetch] [--json] [--exit-code]`
+`place status [<path>...] [--fetch] [--short] [--json] [--exit-code]`
 
 Prints the state of every repo, including nested workplaces. By default it doesn't touch the network, like `git status`. `--fetch` fetches first.
+
+By default each repo gets its path on a line of its own, then a few lines in the words `git status` uses, such as `On branch main` and `Your branch is behind 'origin/main' by 1 commit.`, plus what place adds, such as which branch the repo should be on. With `--fetch`, git's fetch output comes first. `-s`/`--short` prints one line per repo in the style of `git status --short --branch`, such as `main [behind 1]; uncommitted changes`.
 
 `--json` prints one object with a `repos` array. Each repo has its `path` relative to the workplace, its `url` and `ref` (`null` for an unlisted repo, or when there's no ref), and its `states`, named exactly as in [Repo state](#repo-state):
 
@@ -148,7 +150,7 @@ The exit code is 0 unless place itself fails. With `--exit-code`, it is 1 when a
 
 ### place sync
 
-`place sync [<path>...]`
+`place sync [<path>...] [--short]`
 
 For each repo, in parallel:
 
@@ -159,6 +161,8 @@ For each repo, in parallel:
 5. Anything else (dirty, elsewhere, ahead, diverged, default moved, a different tag or commit checked out) is reported and left alone. `sync` never changes which branch is checked out.
 
 After a repo is synced, place recurses into it if it is a nested workplace.
+
+By default each repo gets its path on a line of its own, then what git printed while cloning, fetching and fast-forwarding. When a repo isn't left clean and on its ref, the lines `place status` would print follow, so a repo that place left alone still says why. `-s`/`--short` prints one line per repo instead, such as `main fa853e7..8335079 (fast-forward)` or `on feature/x, not main`.
 
 The exit code is non-zero if any clone or fetch failed, if any repo had the wrong remote or wasn't a repo, or if a ref's branch had diverged from its remote. Repos that are dirty or elsewhere don't affect the exit code, because that is normal work in progress.
 

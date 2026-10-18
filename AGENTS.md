@@ -29,7 +29,7 @@ Skills live in `.agents/skills/`. `.claude/skills` is a symlink to that director
 - Behavior is specified in `features/` before it's implemented. Integration tests are cucumber-rs. Unit tests are ordinary Rust tests next to the code.
 - Integration tests use local bare repos as remotes and never touch the network.
 - `features/README.md` defines the step vocabulary and placeholders. Reuse those steps, and add new ones there.
-- Command output is for people. Every line must make sense to someone who doesn't know place's internals: say what place found, what it did or deliberately didn't do, and why when that isn't obvious. Keep lines short, but clear beats terse. `--json` output is for machines and can be as concise as it likes.
+- Command output is for people, and must make sense to someone who doesn't know place's internals. Prefer git's own output and git's wording (`git status`, `git status --short`) over place's own vocabulary, and only add words where place knows something git doesn't, such as which branch a repo should be on. Commands that report on many repos print a block per repo by default and one line per repo with `-s`/`--short`. `--json` output is for machines and can be as concise as it likes.
 - Issue numbers and tracker URLs appear in commit messages and PR descriptions only, never in source, comments or `.feature` files.
 - `@wip` is the only Gherkin tag. CI excludes `@wip` scenarios.
 - mise provides the Rust toolchain and the tasks: `mise run build`, `mise run test` (or `test:unit` and `test:features`), `mise run lint`, `mise run fmt`. Run `mise run lint` and `mise run test` before committing.
