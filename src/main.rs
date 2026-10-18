@@ -45,7 +45,7 @@ const EXAMPLES: &str = "Examples:
 #[derive(Debug, Parser)]
 #[command(
     name = "place",
-    version,
+    version = env!("PLACE_VERSION"),
     long_about = ABOUT,
     after_long_help = EXAMPLES,
     override_usage = "place [FLAGS] <COMMAND>",

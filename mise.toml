@@ -1,6 +1,5 @@
 [tools]
 rust = { version = "1.99.0", components = "clippy,rustfmt" }
-git-cliff = "2.14.2"
 
 [tasks.build]
 description = "Build the place binary"
@@ -26,22 +25,14 @@ run = ["cargo fmt --check", "cargo clippy --all-targets -- -D warnings"]
 description = "Format the code"
 run = "cargo fmt"
 
-[tasks."release:version"]
-description = "Print the version the next release would get, from the commits since the last"
-run = "git cliff --bumped-version"
-
-[tasks."release:notes"]
-description = "Print the notes for the next release"
-run = "git cliff --unreleased --strip all"
-
 [tasks.dist]
 description = "Build a release archive for this platform in dist/"
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
 cargo build --release --locked
-pkgid=$(cargo pkgid)
-version=${pkgid##*[#@]}
+# build.rs takes the version from git, so ask the binary rather than Cargo.toml.
+version=$(target/release/place --version | cut -d' ' -f2)
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 mkdir -p dist
 tar -czf "dist/place-$version-$os-$(uname -m).tar.gz" -C target/release place
