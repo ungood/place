@@ -19,6 +19,13 @@ async fn new_branch(world: &mut PlaceWorld, path: String, branch: String) {
         .await;
 }
 
+#[given(expr = "{string} has a detached HEAD")]
+async fn detached_head(world: &mut PlaceWorld, path: String) {
+    world
+        .git(&world.path(&path), &["switch", "-q", "--detach"])
+        .await;
+}
+
 #[given(expr = "{string} has an uncommitted change")]
 async fn uncommitted_change(world: &mut PlaceWorld, path: String) {
     fs::write(world.path(&path).join("README.md"), CHANGED).expect("write change");

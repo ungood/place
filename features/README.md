@@ -28,7 +28,7 @@ Setup:
 - `the workplace is a git repository`
 - `the environment variable "<name>" is "<value>"`
 - `"<path>" is a clone of "<url>"`
-- `"<path>" is on a new branch "<branch>"`
+- `"<path>" is on a new branch "<branch>"`, `has a detached HEAD`
 - `"<path>" has an uncommitted change`, `a staged change`, `an untracked file`, `a stash`, `a local commit on "<branch>"`, `a local branch "<branch>" with its own commit`, `a local branch "<branch>" at "<ref>"`
 - `the origin of "<path>" is "<url>"`
 
@@ -40,7 +40,8 @@ Outcome:
 
 - `the command succeeds`, `the command fails`, `the command fails with exit code <n>`
 - `the error says:` and `the help says:`, with the expected text as a doc string. Each line must appear in the error or help that place prints, after colors are removed.
-- `place warns:` and `the output says:`, matched the same way.
+- `place warns:` and `the output says:`, matched the same way. `the output says:` checks standard output only.
+- `place prints:` checks everything place prints, including the per-repo progress lines on standard error.
 - `place reports "<path>" as "<state>"` and `place doesn't report "<path>" as "<state>"` run `place status --json` without fetching and check the repo's states.
 - `"<path>" is a clone of "<url>"`
 - `"<path>" is checked out on "<branch>"`, `is detached at the tag "<tag>"`

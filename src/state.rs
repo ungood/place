@@ -80,6 +80,9 @@ pub struct Inspection {
     pub actual_url: Option<String>,
     pub checked_out: Option<String>,
     pub tracking: Option<Tracking>,
+    /// The remote's current default branch, when it has moved away from the
+    /// one the repo was cloned with.
+    pub new_default: Option<String>,
 }
 
 impl Inspection {
@@ -89,6 +92,7 @@ impl Inspection {
             actual_url: None,
             checked_out: None,
             tracking: None,
+            new_default: None,
         }
     }
 
@@ -159,6 +163,7 @@ fn compute(
     refs: &Refs,
 ) -> Result<Inspection, Error> {
     let mut states = Vec::new();
+    let mut new_default = None;
     let target = match &entry.reference {
         Some(reference) => refs
             .resolve(reference, &remote)
@@ -169,6 +174,7 @@ fn compute(
                 && *cloned != fetched
             {
                 states.push(State::DefaultMoved);
+                new_default = Some(fetched);
             }
             match cloned.or(refs.fetched_default(&remote)) {
                 Some(branch) => Target::Branch(branch),
@@ -237,5 +243,6 @@ fn compute(
         actual_url: None,
         checked_out: copy.branch.clone(),
         tracking,
+        new_default,
     })
 }

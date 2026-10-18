@@ -17,6 +17,10 @@ Feature: place sync
     Then the command succeeds
     And "place" is a clone of "https://github.com/ungood/place.git"
     And "place" is checked out on "main"
+    And place prints:
+      """
+      place  wasn't here; cloned it from https://github.com/ungood/place.git
+      """
 
   Scenario Outline: Missing repos are cloned at their ref
     Given the remote "https://github.com/ungood/place.git" has a branch "develop"
@@ -30,6 +34,10 @@ Feature: place sync
     When I run "place sync"
     Then the command succeeds
     And "place" is <checkout>
+    And place prints:
+      """
+      place  wasn't here; cloned <ref> from https://github.com/ungood/place.git
+      """
 
     Examples:
       | ref                                      | checkout                   |
@@ -44,6 +52,19 @@ Feature: place sync
     When I run "place sync"
     Then the command succeeds
     And "place" is at the remote's latest commit on "main"
+    And place prints:
+      """
+      place  fast-forwarded main by 1 commit to match origin/main
+      """
+
+  Scenario: A clean repo already on its remote's latest commit is up to date
+    Given "place" is a clone of "https://github.com/ungood/place.git"
+    When I run "place sync"
+    Then the command succeeds
+    And place prints:
+      """
+      place  on main, up to date with origin/main
+      """
 
   Scenario: A dirty repo is fetched but not moved
     Given "place" is a clone of "https://github.com/ungood/place.git"
@@ -53,6 +74,10 @@ Feature: place sync
     Then the command succeeds
     And "place" still has its uncommitted change
     And place reports "place" as "behind"
+    And place prints:
+      """
+      place  main is 1 commit behind origin/main but has uncommitted changes; didn't fast-forward it
+      """
 
   Scenario: A repo on another branch stays there, and its ref's branch is fast-forwarded
     Given "place" is a clone of "https://github.com/ungood/place.git"
@@ -62,6 +87,53 @@ Feature: place sync
     Then the command succeeds
     And "place" is checked out on "feature/x"
     And the local branch "main" of "place" is at the remote's latest commit on "main"
+    And place prints:
+      """
+      place  on branch feature/x, not main; left it alone; fast-forwarded main by 1 commit to match origin/main
+      """
+
+  Scenario: A repo with a detached HEAD is left alone
+    Given "place" is a clone of "https://github.com/ungood/place.git"
+    And "place" has a detached HEAD
+    When I run "place sync"
+    Then the command succeeds
+    And place prints:
+      """
+      place  detached HEAD, not main; left it alone
+      """
+
+  Scenario: A repo at its pinned tag has nothing to update
+    Given the remote "https://github.com/ungood/place.git" has a tag "v1.0"
+    And the workplace has the file "place.toml":
+      """
+      [repos.place]
+      url = "https://github.com/ungood/place.git"
+      ref = "v1.0"
+      """
+    And "place" is a clone of "https://github.com/ungood/place.git"
+    And "place" has a detached HEAD
+    When I run "place sync"
+    Then the command succeeds
+    And place prints:
+      """
+      place  at v1.0, as place.toml pins it; nothing to update
+      """
+
+  Scenario: A repo whose ref's branch isn't on the remote says so
+    Given the workplace has the file "place.toml":
+      """
+      [repos.place]
+      url = "https://github.com/ungood/place.git"
+      ref = "develop"
+      """
+    And "place" is a clone of "https://github.com/ungood/place.git"
+    And "place" is on a new branch "develop"
+    When I run "place sync"
+    Then the command succeeds
+    And place prints:
+      """
+      place  origin has no branch develop; nothing to fast-forward to
+      """
 
   Scenario: A repo that's ahead is left alone
     Given "place" is a clone of "https://github.com/ungood/place.git"
@@ -69,6 +141,10 @@ Feature: place sync
     When I run "place sync"
     Then the command succeeds
     And place reports "place" as "ahead"
+    And place prints:
+      """
+      place  main is 1 commit ahead of origin/main; left it for you to push
+      """
 
   Scenario: A diverged repo is left alone and fails the sync
     Given "place" is a clone of "https://github.com/ungood/place.git"
@@ -135,6 +211,10 @@ Feature: place sync
     Then the command succeeds
     And "place" is checked out on "main"
     And place reports "place" as "default moved"
+    And place prints:
+      """
+      place  on main, up to date with origin/main; origin's default branch moved from main to trunk; kept following main (set a ref in place.toml to switch)
+      """
 
   Scenario: sync recurses into nested workplaces
     Given a remote repository "https://github.com/ungood/agents.git"
