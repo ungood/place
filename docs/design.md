@@ -23,7 +23,7 @@ Status: draft, 2026-10-15.
 - **Nested workplace.** A repo that contains its own place configuration. place recurses into it, and its repos are resolved relative to its own directory. Parents never need to know about grandchildren.
 - **Unlisted repo.** A git checkout directly inside the workplace that no configuration lists. place reports it and leaves it alone.
 
-A workplace may itself be a git repository, as `ungood/factory` is. That repository tracks the workplace's own files (configuration, `AGENTS.md`, `mise.toml`) and ignores the child checkouts.
+A workplace may itself be a git repository. That repository tracks the workplace's own files (configuration, `AGENTS.md`, `mise.toml`) and ignores the child checkouts.
 
 ## Configuration
 

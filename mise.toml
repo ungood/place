@@ -37,10 +37,3 @@ os=$(uname -s | tr '[:upper:]' '[:lower:]')
 mkdir -p dist
 tar -czf "dist/place-$version-$os-$(uname -m).tar.gz" -C target/release place
 '''
-
-[tasks.link]
-description = "Build this checkout and link it into mise as packslip:github.com/ungood/place@local"
-run = [
-  "cargo install --path . --root target/local --locked --force",
-  "mise link --force packslip:github.com/ungood/place@local target/local",
-]
