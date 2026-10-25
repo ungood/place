@@ -194,7 +194,7 @@ Treating every `*.repos` file as a nested workplace may be too broad. Some repos
 - **Git:** shell out to the git CLI. That gives place the user's credential helpers, SSH agent, `insteadOf` rules and hooks for free, which is also why vcstool does it. A library such as gix can speed up read-only `status` later if it proves slow.
 - **Concurrency:** a worker pool of `--jobs` threads (default: the number of CPUs), each running git subprocesses.
 - **Tests:** unit tests in Rust. Integration tests in cucumber-rs, which run the real binary against temporary directories with local bare repositories as remotes, so they need no network.
-- **Distribution:** GitHub releases, a nix flake, and installation through mise (`mise use github:ungood/place`). To install with Nix, run `nix profile install github:ungood/place`, or add `github:ungood/place` as a flake input and use `inputs.place.packages.${system}.default` or `overlays.default`.
+- **Distribution:** GitHub releases, a nix flake, and installation through mise (`mise use github:ungood/place`). The [README](../README.md#install) says how to install with each.
 
 ## Later
 
